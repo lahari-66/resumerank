@@ -1,0 +1,9 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /candidates",
+  "rawPath": "/candidates",
+  "rawQueryString": "jobId=<jobId>",
+  "queryStringParameters": { "jobId": "<jobId>" },
+  "requestContext": { "http": { "method": "GET", "path": "/candidates" } },
+  "isBase64Encoded": false
+}

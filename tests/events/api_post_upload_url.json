@@ -1,0 +1,9 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /upload-url",
+  "rawPath": "/upload-url",
+  "headers": { "content-type": "application/json" },
+  "requestContext": { "http": { "method": "POST", "path": "/upload-url" } },
+  "body": "{\"jobId\": \"<jobId>\", \"name\": \"Ananya Rao\", \"email\": \"ananya.rao@example.com\", \"contentType\": \"application/pdf\", \"fileSize\": 1500}",
+  "isBase64Encoded": false
+}

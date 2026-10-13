@@ -1,0 +1,70 @@
+{
+  "info": {
+    "name": "ResumeRank API",
+    "description": "Three routes from INTERFACES.md. Set the collection variable baseUrl to the HTTP API invoke URL (no trailing slash). 'Create job' stores jobId; 'Get upload URL' stores uploadUrl. For the S3 PUT, choose a PDF under Body -> binary and keep Content-Type application/pdf.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://<api-id>.execute-api.ap-south-1.amazonaws.com" },
+    { "key": "jobId", "value": "" },
+    { "key": "uploadUrl", "value": "" },
+    { "key": "fileSize", "value": "1500" }
+  ],
+  "item": [
+    {
+      "name": "Create job",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('201 Created', () => pm.response.to.have.status(201));",
+        "pm.collectionVariables.set('jobId', pm.response.json().jobId);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/jobs",
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"Cloud Engineer Intern\",\n  \"requiredSkills\": [\"python\", \"aws\", \"docker\", \"linux\", \"sql\"],\n  \"minYears\": 2,\n  \"recruiterEmail\": \"recruiter@example.com\"\n}" }
+      }
+    },
+    {
+      "name": "Get upload URL",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200 OK', () => pm.response.to.have.status(200));",
+        "pm.collectionVariables.set('uploadUrl', pm.response.json().uploadUrl);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/upload-url",
+        "body": { "mode": "raw", "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"name\": \"Ananya Rao\",\n  \"email\": \"ananya.rao@example.com\",\n  \"contentType\": \"application/pdf\",\n  \"fileSize\": {{fileSize}}\n}" }
+      }
+    },
+    {
+      "name": "PUT resume to S3 (pre-signed)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/pdf" }],
+        "url": "{{uploadUrl}}",
+        "body": { "mode": "file", "file": {} },
+        "description": "Pick the PDF whose exact size in bytes you put in the fileSize variable – the size is part of the signature."
+      }
+    },
+    {
+      "name": "List candidates",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200 OK', () => pm.response.to.have.status(200));",
+        "const c = pm.response.json().candidates;",
+        "pm.test('sorted by score', () => { for (let i = 1; i < c.length; i++) pm.expect(c[i-1].score).to.be.at.least(c[i].score); });"
+      ] } }],
+      "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/candidates?jobId={{jobId}}", "host": ["{{baseUrl}}"], "path": ["candidates"], "query": [{ "key": "jobId", "value": "{{jobId}}" }] } }
+    },
+    {
+      "name": "Reject non-PDF (expect 400)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/upload-url",
+        "body": { "mode": "raw", "raw": "{\"jobId\": \"{{jobId}}\", \"name\": \"x\", \"email\": \"x@example.com\", \"contentType\": \"image/png\", \"fileSize\": 10}" }
+      }
+    }
+  ]
+}
