@@ -1,0 +1,2 @@
+# bundled into dist/process_resume.zip by scripts/package_lambda.py (boto3 comes with the runtime)
+pypdf==6.20.1

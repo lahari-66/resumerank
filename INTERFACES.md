@@ -43,6 +43,11 @@ any of these – they are read from Lambda environment variables (and from the g
 | `SNS_TOPIC_ARN` | | ✓ |
 | `SCORE_THRESHOLD` (default `75`) | | ✓ |
 | `METRIC_NAMESPACE` (default `ResumeRank`) | | ✓ |
+| `TEXT_SOURCE` (default `auto`) | | ✓ |
+
+`TEXT_SOURCE=auto` calls Textract and, if the account cannot use Textract (e.g. AWS Free plan:
+`SubscriptionRequiredException`), reads the PDF's embedded text layer with pypdf instead.
+Scanned image PDFs have no text layer and are marked FAILED in that mode.
 
 ---
 

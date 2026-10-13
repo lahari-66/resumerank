@@ -1,0 +1,14 @@
+{
+  "Records": [
+    {
+      "eventVersion": "2.1",
+      "eventSource": "aws:s3",
+      "awsRegion": "ap-south-1",
+      "eventName": "ObjectCreated:Put",
+      "s3": {
+        "bucket": { "name": "resumerank-resumes-<suffix>", "arn": "arn:aws:s3:::resumerank-resumes-<suffix>" },
+        "object": { "key": "resumes/<jobId>/<candidateId>.pdf", "size": 1500 }
+      }
+    }
+  ]
+}
