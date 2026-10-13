@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResumeRank – Recruiter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>ResumeRank</h1>
+    <span>Recruiter dashboard</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Post a job</h2>
+      <form id="job-form" novalidate>
+        <div class="row">
+          <div>
+            <label for="title">Job title</label>
+            <input type="text" id="title" maxlength="200" required placeholder="Cloud Engineer Intern">
+          </div>
+          <div>
+            <label for="recruiter-email">Recruiter email</label>
+            <input type="email" id="recruiter-email" maxlength="200" required>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="skills">Required skills</label>
+            <input type="text" id="skills" required placeholder="python, aws, docker, linux, sql">
+            <p class="hint">Comma-separated. Aliases such as “JS” or “Amazon Web Services” are matched automatically.</p>
+          </div>
+          <div style="flex: 0 1 180px">
+            <label for="min-years">Minimum years</label>
+            <input type="number" id="min-years" min="0" max="15" value="0" required>
+          </div>
+        </div>
+        <button type="submit" id="job-submit">Create job</button>
+      </form>
+      <div class="message" id="job-message" role="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Leaderboard</h2>
+      <div class="row" style="align-items: flex-end">
+        <div>
+          <label for="job-id">Job ID</label>
+          <input type="text" id="job-id" class="mono" placeholder="created above, or paste an existing job id">
+        </div>
+        <div style="flex: 0 0 auto">
+          <button type="button" id="load" class="secondary">Load</button>
+        </div>
+      </div>
+
+      <div id="job-info" style="display:none; margin-top: 16px">
+        <p><strong id="info-title"></strong> <span class="meta" id="info-meta"></span></p>
+        <p class="meta">Candidate upload link (share this):<br>
+          <a id="share-link" class="mono" target="_blank" rel="noopener"></a></p>
+      </div>
+
+      <div class="legend" style="margin: 12px 0">
+        <span><span class="score high">75+</span> alert sent</span>
+        <span><span class="score mid">50–74</span></span>
+        <span><span class="score low">&lt;50</span></span>
+        <span id="refreshed"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Name</th><th>Score</th><th>Breakdown</th>
+              <th>Matched</th><th>Missing</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="7" class="meta">Create or load a job to see candidates.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="message" id="board-message" role="status"></div>
+    </section>
+
+    <p class="meta">Scores rank resumes by stated fit to the job description (skills 60, experience 20,
+      education 20). They do not measure ability and must never be used to reject a candidate automatically.</p>
+  </main>
+
+  <footer>ResumeRank · course project · serverless on AWS</footer>
+
+  <script src="config.js"></script>
+  <script>
+    const API = ((window.RESUMERANK_CONFIG || {}).apiBaseUrl || "").replace(/\/+$/, "");
+    const REFRESH_MS = 5000;
+    let currentJob = "";
+    let timer = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function show(el, text, kind) {
+      el.textContent = text;
+      el.className = "message show " + kind;
+    }
+    function hide(el) { el.className = "message"; }
+
+    async function api(path, options) {
+      const res = await fetch(API + path, options);
+      let data = {};
+      try { data = await res.json(); } catch (e) { /* empty body */ }
+      if (!res.ok) throw new Error(data.error || ("request failed with status " + res.status));
+      return data;
+    }
+
+    // every value from the API is inserted with textContent, never innerHTML
+    function el(tag, text, className) {
+      const node = document.createElement(tag);
+      if (text !== undefined && text !== null) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+
+    function chips(list, kind) {
+      const td = el("td");
+      if (!list || !list.length) { td.appendChild(el("span", "–", "meta")); return td; }
+      list.forEach((s) => td.appendChild(el("span", s, "chip " + kind)));
+      return td;
+    }
+
+    function band(score) {
+      if (score >= 75) return "high";
+      if (score >= 50) return "mid";
+      return "low";
+    }
+
+    function renderRows(candidates) {
+      const body = $("rows");
+      body.replaceChildren();
+      if (!candidates.length) {
+        const tr = el("tr");
+        const td = el("td", "No candidates yet – share the upload link.", "meta");
+        td.colSpan = 7;
+        tr.appendChild(td);
+        body.appendChild(tr);
+        return;
+      }
+      candidates.forEach((c) => {
+        const tr = el("tr");
+        const scored = c.status === "SCORED";
+        tr.appendChild(el("td", scored ? String(c.rank) : "–"));
+
+        const nameTd = el("td");
+        nameTd.appendChild(el("div", c.name || "(no name)"));
+        if (c.textPreview) {
+          const d = el("details");
+          d.appendChild(el("summary", "OCR preview"));
+          d.appendChild(el("p", c.textPreview));
+          nameTd.appendChild(d);
+        }
+        tr.appendChild(nameTd);
+
+        const scoreTd = el("td");
+        scoreTd.appendChild(el("span", scored ? String(c.score) : "–", "score " + (scored ? band(c.score) : "none")));
+        tr.appendChild(scoreTd);
+
+        tr.appendChild(el("td", scored
+          ? `skills ${c.skillScore} · exp ${c.expScore} · edu ${c.eduScore}` +
+            (c.yearsExperience != null ? ` · ${c.yearsExperience} yrs` : "")
+          : "", "meta"));
+        tr.appendChild(chips(c.matchedSkills, "match"));
+        tr.appendChild(chips(c.missingSkills, "miss"));
+
+        const statusTd = el("td");
+        statusTd.appendChild(el("span", c.status, "status " + c.status));
+        if (c.failureReason) statusTd.appendChild(el("div", c.failureReason, "meta"));
+        tr.appendChild(statusTd);
+
+        body.appendChild(tr);
+      });
+    }
+
+    async function refresh() {
+      if (!currentJob) return;
+      try {
+        const data = await api("/candidates?jobId=" + encodeURIComponent(currentJob));
+        $("job-info").style.display = "block";
+        $("info-title").textContent = data.job.title;
+        $("info-meta").textContent = " · skills: " + data.job.requiredSkills.join(", ") +
+          " · min " + data.job.minYears + " yr(s) · " + data.count + " candidate(s)";
+        renderRows(data.candidates);
+        $("refreshed").textContent = "updated " + new Date().toLocaleTimeString() + " · refreshes every 5 s";
+        hide($("board-message"));
+      } catch (e) {
+        show($("board-message"), "Could not load candidates: " + e.message, "error");
+      }
+    }
+
+    function selectJob(jobId) {
+      currentJob = jobId.trim();
+      if (!currentJob) return;
+      $("job-id").value = currentJob;
+      const url = new URL(location.href);
+      url.searchParams.set("jobId", currentJob);
+      history.replaceState(null, "", url);
+      try { localStorage.setItem("resumerank.jobId", currentJob); } catch (e) { /* storage blocked */ }
+
+      const share = new URL("upload.html", location.href);
+      share.search = "?jobId=" + encodeURIComponent(currentJob);
+      $("share-link").href = share.href;
+      $("share-link").textContent = share.href;
+
+      clearInterval(timer);
+      refresh();
+      timer = setInterval(refresh, REFRESH_MS);
+    }
+
+    $("job-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const msg = $("job-message");
+      if (!API) { show(msg, "config.js is missing the API URL.", "error"); return; }
+      const skills = $("skills").value.split(",").map((s) => s.trim()).filter(Boolean);
+      const body = {
+        title: $("title").value.trim(),
+        recruiterEmail: $("recruiter-email").value.trim(),
+        requiredSkills: skills,
+        minYears: parseInt($("min-years").value, 10) || 0,
+      };
+      if (!body.title || !body.recruiterEmail || !skills.length) {
+        show(msg, "Title, recruiter email and at least one skill are required.", "error");
+        return;
+      }
+      $("job-submit").disabled = true;
+      try {
+        const job = await api("/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        show(msg, "Job created: " + job.jobId, "ok");
+        selectJob(job.jobId);
+      } catch (e) {
+        show(msg, "Could not create job: " + e.message, "error");
+      } finally {
+        $("job-submit").disabled = false;
+      }
+    });
+
+    $("load").addEventListener("click", () => selectJob($("job-id").value));
+
+    let initial = new URLSearchParams(location.search).get("jobId");
+    if (!initial) { try { initial = localStorage.getItem("resumerank.jobId"); } catch (e) { /* ignore */ } }
+    if (initial) selectJob(initial);
+  </script>
+</body>
+</html>
