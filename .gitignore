@@ -1,0 +1,25 @@
+# secrets and local config (GIT_RULES.md section 3)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+**/credentials
+**/aws-credentials*
+
+# build output
+__pycache__/
+*.pyc
+*.zip
+dist/
+.venv/
+node_modules/
+
+# frontend runtime config holds the deployed API URL; only the example is committed
+frontend/config.js
+
+# editor / os
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
