@@ -1,0 +1,46 @@
+{
+  "widgets": [
+    {
+      "type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
+      "properties": {
+        "title": "Invocations", "region": "ap-south-1", "stat": "Sum", "period": 300, "view": "timeSeries",
+        "metrics": [
+          ["AWS/Lambda", "Invocations", "FunctionName", "process_resume"],
+          ["AWS/Lambda", "Invocations", "FunctionName", "api_handler"]
+        ]
+      }
+    },
+    {
+      "type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
+      "properties": {
+        "title": "Errors", "region": "ap-south-1", "stat": "Sum", "period": 300, "view": "timeSeries",
+        "metrics": [
+          ["AWS/Lambda", "Errors", "FunctionName", "process_resume"],
+          ["AWS/Lambda", "Errors", "FunctionName", "api_handler"]
+        ]
+      }
+    },
+    {
+      "type": "metric", "x": 0, "y": 6, "width": 12, "height": 6,
+      "properties": {
+        "title": "Duration (ms, average)", "region": "ap-south-1", "stat": "Average", "period": 300, "view": "timeSeries",
+        "metrics": [
+          ["AWS/Lambda", "Duration", "FunctionName", "process_resume"],
+          ["AWS/Lambda", "Duration", "FunctionName", "api_handler"]
+        ]
+      }
+    },
+    {
+      "type": "metric", "x": 12, "y": 6, "width": 12, "height": 6,
+      "properties": {
+        "title": "CandidateScore", "region": "ap-south-1", "period": 300, "view": "timeSeries",
+        "metrics": [
+          ["ResumeRank", "CandidateScore", { "stat": "Average", "label": "average" }],
+          ["ResumeRank", "CandidateScore", { "stat": "Maximum", "label": "max" }],
+          ["ResumeRank", "CandidateScore", { "stat": "SampleCount", "label": "resumes scored", "yAxis": "right" }]
+        ],
+        "yAxis": { "left": { "min": 0, "max": 100 } }
+      }
+    }
+  ]
+}
