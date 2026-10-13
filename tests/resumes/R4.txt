@@ -1,0 +1,12 @@
+Imran Shaik
+imran.shaik@example.com  |  +91 90000 00004  |  Vijayawada
+OBJECTIVE
+Junior developer looking for a cloud internship.
+EXPERIENCE
+Junior Developer, Greenfield Retail   Jan 2025 - Jan 2026
+- Wrote Python scripts to clean sales data.
+- Built SQL queries for weekly reports.
+SKILLS
+Python, SQL, Microsoft Excel, Communication
+EDUCATION
+Higher Secondary Certificate (Class 12), State Board   2020 - 2022

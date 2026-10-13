@@ -1,0 +1,6 @@
+# local development only - nothing here is deployed (boto3 ships with the Lambda runtime)
+boto3
+fpdf2
+Pillow
+pyflakes
+pypdf

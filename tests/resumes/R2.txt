@@ -1,0 +1,13 @@
+Rohit Varma
+rohit.varma@example.com  |  +91 90000 00002  |  Bengaluru
+PROFILE
+DevOps-minded developer, 2 years in industry.
+WORK EXPERIENCE
+Software Developer, Bluepeak Labs   Aug 2023 - Aug 2025
+- Wrote Python3 scripts and JS dashboards for internal tooling.
+- Deployed services on Amazon Web Services using docker-compose.
+- Administered Ubuntu and RHEL servers; tuned PL/SQL queries.
+TECHNICAL SKILLS
+Python3, JS, Amazon Web Services, docker-compose, Ubuntu, RHEL, PL/SQL
+EDUCATION
+Diploma in Computer Engineering, City Polytechnic   2020 - 2023

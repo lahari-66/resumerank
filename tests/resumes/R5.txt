@@ -1,0 +1,12 @@
+Sneha Kulkarni
+sneha.kulkarni@example.com  |  +91 90000 00005  |  Pune
+SUMMARY
+Mechanical design engineer with 5 years of experience in product design.
+EXPERIENCE
+Design Engineer, Apex Motors   Jun 2019 - May 2024
+- Modelled gearbox housings in SolidWorks and AutoCAD.
+- Ran structural simulations in ANSYS and MATLAB.
+SKILLS
+SolidWorks, AutoCAD, ANSYS, MATLAB, CATIA, Teamwork
+EDUCATION
+M.Tech in Machine Design, Western University of Engineering   2017 - 2019

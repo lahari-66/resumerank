@@ -1,0 +1,18 @@
+Arjun Reddy
+arjun.reddy@example.com  |  +91 90000 00006  |  Warangal
+SUMMARY
+Cloud engineer with 3 years of experience. Technical skills are listed on page 2.
+EXPERIENCE
+Cloud Engineer, Silverline Tech   Aug 2022 - Jul 2025
+- Owned build pipelines and on-call rotation for a payments team.
+- Reduced deployment time from 40 minutes to 8 minutes.
+- Mentored two interns.
+EDUCATION
+B.Tech in Computer Science, Eastgate Institute of Technology   2018 - 2022
+SKILLS
+Languages: Python, SQL
+Cloud: AWS (EC2, S3, Lambda, DynamoDB)
+Platforms: Docker, Linux
+PROJECTS
+Serverless file converter on AWS Lambda   Jan 2024 - Mar 2024
+Container monitoring dashboard with Docker and Grafana   Sep 2024 - Nov 2024

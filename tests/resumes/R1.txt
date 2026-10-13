@@ -1,0 +1,15 @@
+Ananya Rao
+ananya.rao@example.com  |  +91 90000 00001  |  Hyderabad
+SUMMARY
+Cloud engineer with 3 years of experience building and running services on AWS.
+EXPERIENCE
+Cloud Engineer, Northwind Software Pvt Ltd   Jul 2022 - Jun 2025
+- Built Python automation for AWS EC2, S3 and Lambda deployments.
+- Containerised six services with Docker and ran them on Linux hosts.
+- Wrote SQL reports on a MySQL database for the operations team.
+SKILLS
+Python, AWS, Docker, Linux, SQL, Git, Bash, REST APIs
+EDUCATION
+B.Tech in Computer Science, Riverside Institute of Technology   2018 - 2022
+CERTIFICATIONS
+AWS Certified Cloud Practitioner
