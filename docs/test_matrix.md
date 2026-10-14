@@ -23,10 +23,10 @@ Fill in "Actual" from the leaderboard after the Day 2 Hr 1 run.
 | # | File | Design | Purpose | Blueprint band | Skills /60 | Exp /20 | Edu /20 | Expected (formula) | Alert? | Actual | Pass? |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | R1 | `R1.pdf` | all 5 skills, 3 yrs, B.Tech, text PDF | upper bound; SNS must fire | 90–100 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | 100, alert sent (console upload, 13 Oct) | ✅ |
-| R2 | `R2.pdf` | all skills as aliases (Python3, Amazon Web Services, docker-compose, Ubuntu/RHEL, PL/SQL), 2 yrs, diploma | alias dictionary | 85–95 | 60 (5/5) | 20 (2.0 yrs) | 10 | **90** | yes | | |
+| R2 | `R2.pdf` | all skills as aliases (Python3, Amazon Web Services, docker-compose, Ubuntu/RHEL, PL/SQL), 2 yrs, diploma | alias dictionary | 85–95 | 60 (5/5) | 20 (2.0 yrs) | 10 | **90** | yes | 90 (8 of 8 load-test runs) | ✅ |
 | R3 | `R3.pdf` | same profile as R1, **image-only PDF** (no text layer) | OCR path | 85–100 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | FAILED – no text layer (Textract unavailable on Free plan) | expected on this account |
-| R4 | `R4.pdf` | 2 of 5 skills (python, sql), 1 yr, no degree | mid band; no alert | 40–55 | 24 (2/5) | 10 (1.0 yr) | 10 | **44** | no | | |
-| R5 | `R5.pdf` | no required skills, 5 yrs, M.Tech | skill weight dominates | 30–40 | 0 (0/5) | 20 (5.0 yrs) | 20 | **40** | no | | |
+| R4 | `R4.pdf` | 2 of 5 skills (python, sql), 1 yr, no degree | mid band; no alert | 40–55 | 24 (2/5) | 10 (1.0 yr) | 10 | **44** | no | 44, no alert (browser upload + 8 load-test runs) | ✅ |
+| R5 | `R5.pdf` | no required skills, 5 yrs, M.Tech | skill weight dominates | 30–40 | 0 (0/5) | 20 (5.0 yrs) | 20 | **40** | no | 40 (8 of 8 load-test runs) | ✅ |
 | R6 | `R6.pdf` | 2 pages, skills only on page 2, 3 yrs, B.Tech | multi-page Textract | R1 ± 5 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | 100, 2 pages read, alert sent (13 Oct) | ✅ |
 
 Notes:
