@@ -51,19 +51,37 @@ RANGE_RE = re.compile(
     re.IGNORECASE,
 )
 
-EDUCATION_HEADINGS = (
-    "education", "educational qualification", "educational qualifications", "academic",
-    "academics", "academic qualification", "academic qualifications", "academic details",
-    "qualification", "qualifications", "academic background", "education and training",
-)
-OTHER_HEADINGS = (
-    "experience", "work experience", "professional experience", "employment", "employment history",
-    "internship", "internships", "projects", "academic projects", "personal projects", "skills",
-    "technical skills", "key skills", "core skills", "certifications", "certificates", "achievements",
-    "awards", "summary", "professional summary", "profile", "objective", "career objective",
-    "activities", "extracurricular activities", "publications", "languages", "hobbies", "interests",
-    "declaration", "contact", "personal details", "training", "positions of responsibility",
-)
+# Section headings decide which dates count as work experience.
+#   education – never counted (degree years are not experience)
+#   work      – counted towards years of experience
+#   activity  – projects, hackathons, club roles: dates earn the fresher credit but are not work years
+#   neutral   – summary, skills, ... (and text before the first heading): counted, as before
+SECTION_HEADINGS = {
+    "education": (
+        "education", "educational qualification", "educational qualifications", "academic", "academics",
+        "academic qualification", "academic qualifications", "academic details", "qualification",
+        "qualifications", "academic background", "education and training",
+    ),
+    "work": (
+        "experience", "work experience", "professional experience", "employment", "employment history",
+        "internship", "internships", "work history", "industry experience", "internship experience",
+        "experience and internships", "relevant experience",
+    ),
+    "activity": (
+        "projects", "academic projects", "personal projects", "key projects", "project", "achievements",
+        "awards", "honours", "honors", "achievements and awards", "positions of responsibility",
+        "achievements and positions of responsibility", "leadership", "leadership and activities",
+        "activities", "extracurricular activities", "extra curricular activities", "co curricular activities",
+        "hackathons", "volunteering", "certifications", "certificates", "publications", "training",
+    ),
+    "neutral": (
+        "skills", "technical skills", "key skills", "core skills", "summary", "professional summary",
+        "profile", "objective", "career objective", "languages", "hobbies", "interests", "declaration",
+        "contact", "personal details",
+    ),
+}
+_HEADING_KIND = {h: kind for kind, names in SECTION_HEADINGS.items() for h in names}
+YEAR_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 
 @lru_cache(maxsize=4)
 def load_skills(path=SKILLS_PATH):
@@ -146,34 +164,37 @@ def has_degree(text):
 
 
 def _heading_of(line):
-    cleaned = re.sub(r"[^a-z &]", "", line.lower()).strip()
-    if not cleaned or len(cleaned) > 40:
+    cleaned = re.sub(r"\s+", " ", re.sub(r"[^a-z ]", " ", line.lower().replace("&", " and "))).strip()
+    if not cleaned or len(cleaned) > 50:
         return None
-    if cleaned in EDUCATION_HEADINGS:
-        return "education"
-    if cleaned in OTHER_HEADINGS:
-        return "other"
-    return None
+    return _HEADING_KIND.get(cleaned)
 
 
-def education_spans(text):
-    """Character spans of the EDUCATION section, so degree years are not counted as experience."""
-    spans, start, pos = [], None, 0
+def section_spans(text):
+    """[(start, end, kind)] covering the whole text; text before the first heading is 'neutral'."""
+    spans, start, kind, pos = [], 0, "neutral", 0
     for line in (text or "").splitlines(keepends=True):
         heading = _heading_of(line)
-        if heading == "education" and start is None:
-            start = pos
-        elif heading == "other" and start is not None:
-            spans.append((start, pos))
-            start = None
+        if heading:
+            if pos > start:
+                spans.append((start, pos, kind))
+            start, kind = pos, heading
         pos += len(line)
-    if start is not None:
-        spans.append((start, pos))
+    if pos > start:
+        spans.append((start, pos, kind))
     return spans
 
 
-def _in_spans(offset, spans):
-    return any(a <= offset < b for a, b in spans)
+def _kind_at(offset, spans):
+    for a, b, kind in spans:
+        if a <= offset < b:
+            return kind
+    return "neutral"
+
+
+def education_spans(text):
+    """Character spans of the EDUCATION section(s)."""
+    return [(a, b) for a, b, kind in section_spans(text) if kind == "education"]
 
 
 def _month_index(match, prefix):
@@ -217,43 +238,55 @@ def _merged_months(intervals):
 def estimate_experience(text, date_entities=(), now=None):
     """Return (years, has_dates).
 
-    (a) explicit "N years" / "N+ yrs" mentions;
-    (b) date ranges ("2021 - 2023", "Jun 2022 - Present") from the text and from Comprehend
-        DATE entities, outside the education section, merged so overlaps are not double-counted.
-    The larger of (a) and (b) is taken and capped at 15.
+    years – the larger of (a) explicit "N years" / "N+ yrs" mentions and (b) date ranges
+    ("2021 - 2023", "Jun 2022 - Present") from the text and from Comprehend DATE entities, merged so
+    overlaps are not double-counted, capped at 15. Only work sections and unlabelled text count:
+    education dates never do, and project / hackathon / club-role dates are not work years.
+
+    has_dates – the resume shows dated work or activity outside education (a date range anywhere
+    outside education, or a year in a projects / achievements style section). Used for the fresher
+    credit when the job's minimum experience is 0.
 
     date_entities: dicts with "Text" and "BeginOffset" (offset into the full text).
     """
     now = now or datetime.now(timezone.utc)
     text = text or ""
-    edu = education_spans(text)
+    spans = section_spans(text)
+
+    def counts(offset):
+        return _kind_at(offset, spans) in ("work", "neutral")
 
     explicit = 0.0
     for m in EXPLICIT_YEARS_RE.finditer(text):
-        if not _in_spans(m.start(), edu):
+        if counts(m.start()):
             explicit = max(explicit, float(m.group(1)))
 
-    intervals = []
+    work, activity = [], []
     for m in RANGE_RE.finditer(text):
-        if not _in_spans(m.start(), edu):
-            intervals.extend(_ranges_in(m.group(0), now))
+        kind = _kind_at(m.start(), spans)
+        if kind != "education":
+            (work if kind in ("work", "neutral") else activity).extend(_ranges_in(m.group(0), now))
 
     outside = sorted(
-        (e for e in date_entities if not _in_spans(e.get("BeginOffset", -1), edu)),
+        (e for e in date_entities if _kind_at(e.get("BeginOffset", -1), spans) in ("work", "neutral")),
         key=lambda e: e.get("BeginOffset", 0),
     )
     for i, ent in enumerate(outside):
-        intervals.extend(_ranges_in(ent.get("Text", ""), now))
+        work.extend(_ranges_in(ent.get("Text", ""), now))
         # Comprehend often returns "Jun 2022" and "Present" as two entities joined by a dash
         if i + 1 < len(outside):
             nxt = outside[i + 1]
             a, b = ent.get("BeginOffset", 0), nxt.get("BeginOffset", 0) + len(nxt.get("Text", ""))
             if 0 <= a < b <= len(text) and b - a < 60:
-                intervals.extend(_ranges_in(text[a:b], now))
+                work.extend(_ranges_in(text[a:b], now))
 
-    from_ranges = _merged_months(intervals) / 12.0
+    from_ranges = _merged_months(work) / 12.0
     years = min(max(explicit, from_ranges), MAX_YEARS)
-    has_dates = bool(intervals) or any(re.search(r"(?:19|20)\d{2}", e.get("Text", "")) for e in outside)
+    dated_activity = any(
+        _kind_at(m.start(), spans) == "activity" and int(m.group(1)) <= now.year
+        for m in YEAR_RE.finditer(text)
+    )
+    has_dates = bool(work) or bool(activity) or dated_activity
     return round(years, 1), has_dates
 
 

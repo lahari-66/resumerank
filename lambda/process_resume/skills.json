@@ -1,164 +1,608 @@
 {
   "version": 1,
-  "noBareMatch": ["go", "r", "c", "rest", "spring", "excel", "swift"],
+  "noBareMatch": [
+    "go",
+    "r",
+    "c",
+    "rest",
+    "spring",
+    "excel",
+    "swift"
+  ],
   "skills": {
-    "python": ["python3", "python 3", "python programming"],
-    "java": ["core java", "java 8", "java 11", "java 17", "j2ee", "java ee"],
-    "javascript": ["js", "java script", "ecmascript", "es6", "vanilla js"],
-    "typescript": ["ts", "type script"],
-    "c": ["c language", "c programming", "ansi c"],
-    "c++": ["cpp", "c plus plus"],
-    "c#": ["c sharp", "csharp"],
-    "go": ["golang", "go lang", "go language"],
-    "rust": ["rust lang", "rust language"],
+    "python": [
+      "python3",
+      "python 3",
+      "python programming"
+    ],
+    "java": [
+      "core java",
+      "java 8",
+      "java 11",
+      "java 17",
+      "j2ee",
+      "java ee"
+    ],
+    "javascript": [
+      "js",
+      "java script",
+      "ecmascript",
+      "es6",
+      "vanilla js",
+      "javascript/typescript"
+    ],
+    "typescript": [
+      "ts",
+      "type script",
+      "typescript/javascript"
+    ],
+    "c": [
+      "c language",
+      "c programming",
+      "ansi c"
+    ],
+    "c++": [
+      "cpp",
+      "c plus plus"
+    ],
+    "c#": [
+      "c sharp",
+      "csharp"
+    ],
+    "go": [
+      "golang",
+      "go lang",
+      "go language"
+    ],
+    "rust": [
+      "rust lang",
+      "rust language"
+    ],
     "kotlin": [],
-    "swift": ["swift programming", "swiftui"],
+    "swift": [
+      "swift programming",
+      "swiftui"
+    ],
     "php": [],
-    "ruby": ["ruby lang"],
-    "r": ["r programming", "r language", "rstudio"],
+    "ruby": [
+      "ruby lang"
+    ],
+    "r": [
+      "r programming",
+      "r language",
+      "rstudio"
+    ],
     "scala": [],
-    "dart": ["dart language"],
-    "bash": ["shell scripting", "shell script", "bash scripting", "unix shell"],
+    "dart": [
+      "dart language"
+    ],
+    "bash": [
+      "shell scripting",
+      "shell script",
+      "bash scripting",
+      "unix shell"
+    ],
     "powershell": [],
     "matlab": [],
     "perl": [],
-
-    "html": ["html5"],
-    "css": ["css3"],
-    "sass": ["scss"],
-    "tailwind": ["tailwindcss", "tailwind css"],
+    "html": [
+      "html5"
+    ],
+    "css": [
+      "css3"
+    ],
+    "sass": [
+      "scss"
+    ],
+    "tailwind": [
+      "tailwindcss",
+      "tailwind css",
+      "tailwind css v3"
+    ],
     "bootstrap": [],
-    "react": ["reactjs", "react.js", "react js"],
-    "angular": ["angularjs", "angular.js"],
-    "vue": ["vuejs", "vue.js"],
-    "next.js": ["nextjs", "next js"],
-    "node.js": ["nodejs", "node js"],
-    "express": ["expressjs", "express.js"],
+    "react": [
+      "reactjs",
+      "react.js",
+      "react js",
+      "react 18",
+      "react.js 18"
+    ],
+    "angular": [
+      "angularjs",
+      "angular.js"
+    ],
+    "vue": [
+      "vuejs",
+      "vue.js"
+    ],
+    "next.js": [
+      "nextjs",
+      "next js",
+      "next.js 14",
+      "next.js app router"
+    ],
+    "node.js": [
+      "nodejs",
+      "node js",
+      "node.js/express"
+    ],
+    "express": [
+      "expressjs",
+      "express.js",
+      "express rest api"
+    ],
     "jquery": [],
     "redux": [],
     "graphql": [],
-    "rest": ["rest api", "rest apis", "restful", "restful api", "restful apis", "rest services"],
+    "rest": [
+      "rest api",
+      "rest apis",
+      "restful",
+      "restful api",
+      "restful apis",
+      "rest services"
+    ],
     "django": [],
-    "flask": ["flask api", "python flask"],
-    "fastapi": ["fast api"],
-    "spring": ["spring framework", "spring mvc"],
-    "spring boot": ["springboot"],
+    "flask": [
+      "flask api",
+      "python flask"
+    ],
+    "fastapi": [
+      "fast api",
+      "fast-api"
+    ],
+    "spring": [
+      "spring framework",
+      "spring mvc"
+    ],
+    "spring boot": [
+      "springboot"
+    ],
     "hibernate": [],
-    ".net": ["dotnet", "dot net", "asp.net", ".net core"],
+    ".net": [
+      "dotnet",
+      "dot net",
+      "asp.net",
+      ".net core"
+    ],
     "laravel": [],
-    "ruby on rails": ["rails"],
+    "ruby on rails": [
+      "rails"
+    ],
     "flutter": [],
     "react native": [],
-    "android": ["android development", "android sdk"],
-    "ios": ["ios development"],
-
-    "sql": ["structured query language", "sql queries", "t-sql", "pl/sql"],
-    "mysql": ["my sql"],
-    "postgresql": ["postgres", "psql"],
-    "oracle": ["oracle db", "oracle database"],
-    "sql server": ["mssql", "ms sql", "microsoft sql server"],
+    "android": [
+      "android development",
+      "android sdk"
+    ],
+    "ios": [
+      "ios development"
+    ],
+    "sql": [
+      "structured query language",
+      "sql queries",
+      "t-sql",
+      "pl/sql"
+    ],
+    "mysql": [
+      "my sql"
+    ],
+    "postgresql": [
+      "postgres",
+      "psql",
+      "postgre sql"
+    ],
+    "oracle": [
+      "oracle db",
+      "oracle database"
+    ],
+    "sql server": [
+      "mssql",
+      "ms sql",
+      "microsoft sql server"
+    ],
     "sqlite": [],
-    "mongodb": ["mongo", "mongo db"],
+    "mongodb": [
+      "mongo",
+      "mongo db"
+    ],
     "redis": [],
     "cassandra": [],
-    "dynamodb": ["dynamo db", "amazon dynamodb"],
-    "elasticsearch": ["elastic search", "opensearch"],
+    "dynamodb": [
+      "dynamo db",
+      "amazon dynamodb",
+      "amazon dynamo db"
+    ],
+    "elasticsearch": [
+      "elastic search",
+      "opensearch"
+    ],
     "firebase": [],
-    "nosql": ["no sql", "no-sql"],
-
-    "aws": ["amazon web services", "amazon aws", "aws cloud"],
-    "azure": ["microsoft azure", "azure cloud"],
-    "gcp": ["google cloud", "google cloud platform"],
-    "ec2": ["amazon ec2"],
-    "s3": ["amazon s3", "aws s3"],
-    "lambda": ["aws lambda"],
-    "cloudformation": ["aws cloudformation"],
-    "cloudwatch": ["amazon cloudwatch", "aws cloudwatch"],
-    "iam": ["aws iam"],
-    "api gateway": ["amazon api gateway", "aws api gateway"],
-    "serverless": ["serverless architecture", "serverless framework"],
-    "docker": ["docker containers", "dockerfile", "docker compose", "docker-compose"],
-    "kubernetes": ["k8s", "eks", "aks", "gke"],
+    "nosql": [
+      "no sql",
+      "no-sql"
+    ],
+    "aws": [
+      "amazon web services",
+      "amazon aws",
+      "aws cloud",
+      "amazon web services (aws)"
+    ],
+    "azure": [
+      "microsoft azure",
+      "azure cloud"
+    ],
+    "gcp": [
+      "google cloud",
+      "google cloud platform"
+    ],
+    "ec2": [
+      "amazon ec2"
+    ],
+    "s3": [
+      "amazon s3",
+      "aws s3",
+      "amazon s3 bucket",
+      "s3 buckets"
+    ],
+    "lambda": [
+      "aws lambda",
+      "lambda functions",
+      "lambda microservices"
+    ],
+    "cloudformation": [
+      "aws cloudformation"
+    ],
+    "cloudwatch": [
+      "amazon cloudwatch",
+      "aws cloudwatch"
+    ],
+    "iam": [
+      "aws iam"
+    ],
+    "api gateway": [
+      "amazon api gateway",
+      "aws api gateway",
+      "apigateway",
+      "http api gateway"
+    ],
+    "serverless": [
+      "serverless architecture",
+      "serverless framework"
+    ],
+    "docker": [
+      "docker containers",
+      "dockerfile",
+      "docker compose",
+      "docker-compose"
+    ],
+    "kubernetes": [
+      "k8s",
+      "eks",
+      "aks",
+      "gke"
+    ],
     "terraform": [],
     "ansible": [],
     "jenkins": [],
-    "github actions": [],
-    "gitlab ci": ["gitlab ci/cd"],
-    "ci/cd": ["cicd", "ci cd", "continuous integration", "continuous delivery", "continuous deployment"],
-    "devops": ["dev ops"],
-    "linux": ["ubuntu", "centos", "red hat", "rhel", "debian", "fedora"],
+    "github actions": [
+      "github action",
+      "gh actions"
+    ],
+    "gitlab ci": [
+      "gitlab ci/cd"
+    ],
+    "ci/cd": [
+      "cicd",
+      "ci cd",
+      "continuous integration",
+      "continuous delivery",
+      "continuous deployment"
+    ],
+    "devops": [
+      "dev ops"
+    ],
+    "linux": [
+      "ubuntu",
+      "centos",
+      "red hat",
+      "rhel",
+      "debian",
+      "fedora"
+    ],
     "windows server": [],
     "nginx": [],
-    "apache": ["apache http server"],
-    "git": ["github", "gitlab", "bitbucket", "version control"],
-    "networking": ["computer networks", "tcp/ip", "dns", "subnetting"],
-    "microservices": ["micro services", "microservice architecture"],
-    "kafka": ["apache kafka"],
-    "rabbitmq": ["rabbit mq"],
+    "apache": [
+      "apache http server"
+    ],
+    "git": [
+      "github",
+      "gitlab",
+      "bitbucket",
+      "version control"
+    ],
+    "networking": [
+      "computer networks",
+      "tcp/ip",
+      "dns",
+      "subnetting"
+    ],
+    "microservices": [
+      "micro services",
+      "microservice architecture"
+    ],
+    "kafka": [
+      "apache kafka",
+      "kafka streams"
+    ],
+    "rabbitmq": [
+      "rabbit mq"
+    ],
     "prometheus": [],
     "grafana": [],
-
-    "machine learning": ["ml", "machine-learning"],
-    "deep learning": ["dl", "deep-learning"],
-    "artificial intelligence": ["ai"],
-    "nlp": ["natural language processing"],
-    "computer vision": ["opencv", "image processing"],
-    "data analysis": ["data analytics", "data analyst"],
-    "data science": ["data scientist"],
-    "statistics": ["statistical analysis"],
+    "machine learning": [
+      "ml",
+      "machine-learning"
+    ],
+    "deep learning": [
+      "dl",
+      "deep-learning"
+    ],
+    "artificial intelligence": [
+      "ai"
+    ],
+    "nlp": [
+      "natural language processing"
+    ],
+    "computer vision": [
+      "opencv",
+      "image processing"
+    ],
+    "data analysis": [
+      "data analytics",
+      "data analyst"
+    ],
+    "data science": [
+      "data scientist"
+    ],
+    "statistics": [
+      "statistical analysis"
+    ],
     "pandas": [],
     "numpy": [],
-    "scikit-learn": ["sklearn", "scikit learn"],
-    "tensorflow": ["tensor flow"],
-    "keras": [],
-    "pytorch": ["torch"],
+    "scikit-learn": [
+      "sklearn",
+      "scikit learn"
+    ],
+    "tensorflow": [
+      "tensor flow",
+      "tensorflow/keras",
+      "tf.keras"
+    ],
+    "keras": [
+      "tensorflow/keras",
+      "tf.keras"
+    ],
+    "pytorch": [
+      "torch",
+      "py torch"
+    ],
     "matplotlib": [],
-    "spark": ["apache spark", "pyspark"],
-    "hadoop": ["apache hadoop", "hdfs"],
-    "airflow": ["apache airflow"],
-    "etl": ["extract transform load"],
-    "power bi": ["powerbi", "microsoft power bi"],
+    "spark": [
+      "apache spark",
+      "pyspark",
+      "spark streaming",
+      "spark structured streaming",
+      "structured streaming"
+    ],
+    "hadoop": [
+      "apache hadoop",
+      "hdfs"
+    ],
+    "airflow": [
+      "apache airflow"
+    ],
+    "etl": [
+      "extract transform load"
+    ],
+    "power bi": [
+      "powerbi",
+      "microsoft power bi"
+    ],
     "tableau": [],
-    "excel": ["microsoft excel", "ms excel", "advanced excel"],
-    "llm": ["large language models", "large language model", "generative ai", "genai"],
-
-    "ui/ux": ["ui design", "ux design", "user experience", "user interface design"],
+    "excel": [
+      "microsoft excel",
+      "ms excel",
+      "advanced excel"
+    ],
+    "llm": [
+      "large language models",
+      "large language model",
+      "generative ai",
+      "genai",
+      "gpt",
+      "openai api"
+    ],
+    "ui/ux": [
+      "ui design",
+      "ux design",
+      "user experience",
+      "user interface design"
+    ],
     "figma": [],
     "selenium": [],
     "junit": [],
-    "pytest": [],
+    "pytest": [
+      "py.test"
+    ],
     "jest": [],
     "postman": [],
-    "unit testing": ["unit tests", "test driven development", "tdd"],
+    "unit testing": [
+      "unit tests",
+      "test driven development",
+      "tdd"
+    ],
     "jira": [],
-    "agile": ["scrum", "agile methodology", "kanban"],
-    "oop": ["object oriented programming", "object-oriented programming", "oops"],
-    "data structures": ["dsa", "data structures and algorithms"],
+    "agile": [
+      "scrum",
+      "agile methodology",
+      "kanban"
+    ],
+    "oop": [
+      "object oriented programming",
+      "object-oriented programming",
+      "oops"
+    ],
+    "data structures": [
+      "dsa",
+      "data structures and algorithms"
+    ],
     "algorithms": [],
     "system design": [],
     "design patterns": [],
-    "multithreading": ["concurrency", "multi-threading"],
-    "operating systems": ["os concepts"],
-    "dbms": ["database management systems", "database management"],
-    "cybersecurity": ["cyber security", "information security", "network security"],
-    "penetration testing": ["pentesting", "ethical hacking"],
+    "multithreading": [
+      "concurrency",
+      "multi-threading"
+    ],
+    "operating systems": [
+      "os concepts"
+    ],
+    "dbms": [
+      "database management systems",
+      "database management"
+    ],
+    "cybersecurity": [
+      "cyber security",
+      "information security",
+      "network security"
+    ],
+    "penetration testing": [
+      "pentesting",
+      "ethical hacking"
+    ],
     "cryptography": [],
     "blockchain": [],
-    "iot": ["internet of things"],
-    "embedded systems": ["embedded c"],
+    "iot": [
+      "internet of things"
+    ],
+    "embedded systems": [
+      "embedded c"
+    ],
     "arduino": [],
     "raspberry pi": [],
     "verilog": [],
     "vhdl": [],
-    "autocad": ["auto cad"],
-    "solidworks": ["solid works"],
+    "autocad": [
+      "auto cad"
+    ],
+    "solidworks": [
+      "solid works"
+    ],
     "ansys": [],
     "catia": [],
-    "sap": ["sap erp"],
+    "sap": [
+      "sap erp"
+    ],
     "salesforce": [],
-    "communication": ["communication skills"],
-    "leadership": ["team leadership"],
-    "problem solving": ["problem-solving"],
-    "teamwork": ["team player", "collaboration"]
+    "communication": [
+      "communication skills"
+    ],
+    "leadership": [
+      "team leadership"
+    ],
+    "problem solving": [
+      "problem-solving"
+    ],
+    "teamwork": [
+      "team player",
+      "collaboration"
+    ],
+    "supabase": [],
+    "vercel": [],
+    "netlify": [],
+    "jwt": [
+      "json web token",
+      "json web tokens",
+      "jwt authentication",
+      "jwt auth"
+    ],
+    "zod": [],
+    "bcrypt": [
+      "bcryptjs"
+    ],
+    "streamlit": [],
+    "opencv": [
+      "open cv",
+      "cv2"
+    ],
+    "lora": [
+      "low-rank adaptation",
+      "qlora",
+      "peft"
+    ],
+    "pyspark": [
+      "py spark"
+    ],
+    "mllib": [
+      "spark mllib"
+    ],
+    "vitest": [],
+    "supertest": [],
+    "cognito": [
+      "amazon cognito",
+      "aws cognito",
+      "cognito-authenticated"
+    ],
+    "amplify": [
+      "aws amplify",
+      "amplify hosting"
+    ],
+    "razorpay": [],
+    "stripe": [],
+    "webrtc": [
+      "web rtc"
+    ],
+    "twilio": [],
+    "gemini": [
+      "gemini 2.0",
+      "gemini 2.0 flash",
+      "google gemini",
+      "gemini api"
+    ],
+    "hugging face": [
+      "huggingface",
+      "hugging face transformers",
+      "transformers library"
+    ],
+    "rbac": [
+      "role-based access control",
+      "role based access control",
+      "role-based access"
+    ],
+    "prisma": [],
+    "mongoose": [],
+    "socket.io": [
+      "socketio",
+      "web sockets",
+      "websockets",
+      "websocket"
+    ],
+    "sqlalchemy": [],
+    "celery": [],
+    "wav2vec2": [
+      "wav2vec 2.0",
+      "wav2vec"
+    ],
+    "u-net": [
+      "unet"
+    ],
+    "efficientnet": [
+      "efficientnetb3",
+      "efficientnet-b3"
+    ],
+    "yolo": [
+      "yolov8",
+      "yolov5"
+    ]
   }
 }
