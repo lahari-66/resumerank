@@ -7,6 +7,7 @@ fake credentials are set before import and every client is swapped for a fake.
 """
 
 import importlib.util
+import json
 import os
 import sys
 import unittest
@@ -65,6 +66,11 @@ class FakeContext:
 
 def s3_event(key=KEY):
     return {"Records": [{"s3": {"bucket": {"name": "resumerank-resumes-test"}, "object": {"key": key}}}]}
+
+
+def sqs_event(*bodies):
+    return {"Records": [{"eventSource": "aws:sqs", "messageId": f"m{i}", "body": body}
+                        for i, body in enumerate(bodies)]}
 
 
 STRONG_LINES = ["Ananya Rao", "EXPERIENCE", "Cloud Engineer  Jul 2022 - Jun 2025",
@@ -223,6 +229,31 @@ class ProcessResumeTests(unittest.TestCase):
             out = processor.lambda_handler(s3_event(), FakeContext())
         self.assertEqual(out["results"][0]["status"], "FAILED")
         self.s3.get_object.assert_not_called()
+
+    def test_sqs_message_is_processed(self):
+        self.textract_returns(STRONG_LINES)
+        out = processor.lambda_handler(sqs_event(json.dumps(s3_event())), FakeContext())
+        self.assertEqual(out["batchItemFailures"], [])
+        self.assertEqual(out["results"][0]["score"], 100)
+
+    def test_sqs_s3_test_event_is_ignored(self):
+        out = processor.lambda_handler(
+            sqs_event(json.dumps({"Service": "Amazon S3", "Event": "s3:TestEvent", "Bucket": "b"})), FakeContext())
+        self.assertEqual(out, {"batchItemFailures": [], "results": []})
+
+    def test_sqs_transient_failure_is_retried_not_marked_failed(self):
+        self.textract_returns(STRONG_LINES)
+        with mock.patch.object(self.cands, "update_item", side_effect=RuntimeError("throttled")):
+            out = processor.lambda_handler(
+                sqs_event(json.dumps(s3_event()), "not json"), FakeContext())
+        self.assertEqual(out["batchItemFailures"], [{"itemIdentifier": "m0"}, {"itemIdentifier": "m1"}])
+        self.sns.publish.assert_not_called()
+
+    def test_sqs_permanent_failure_marks_candidate_failed(self):
+        self.jobs.items = []
+        out = processor.lambda_handler(sqs_event(json.dumps(s3_event())), FakeContext())
+        self.assertEqual(out["batchItemFailures"], [])
+        self.assertEqual(out["results"][0]["status"], "FAILED")
 
     def test_chunks_respect_byte_limit_and_offsets(self):
         text = "".join(f"line {i} with ünïcode ✓\n" for i in range(800))

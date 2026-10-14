@@ -129,6 +129,18 @@ def find_skills(text, key_phrases=(), dictionary=None, extra=()):
     return found
 
 
+def skills_in_order(text, dictionary=None):
+    """Canonical skills found in a text (e.g. a job description), ordered by first mention."""
+    dictionary = dictionary or load_skills()
+    body = _normalise(text)
+    first = {}
+    for canonical, patterns in _search_terms(dictionary).items():
+        hits = [m.start() for p in patterns for m in [p.search(body)] if m]
+        if hits:
+            first[canonical] = min(hits)
+    return sorted(first, key=lambda s: (first[s], s))
+
+
 def has_degree(text):
     return bool(DEGREE_RE.search(text or ""))
 

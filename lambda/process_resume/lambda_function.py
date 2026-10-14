@@ -1,6 +1,7 @@
 """process_resume – S3 ObjectCreated -> Textract (or the PDF text layer) -> Comprehend -> score -> DynamoDB -> SNS.
 
-Handler: lambda_function.lambda_handler (Python 3.12, 256 MB, 120 s, async retries 0).
+Handler: lambda_function.lambda_handler (Python 3.12, 256 MB, 120 s).
+Triggered through SQS (S3 -> resumerank-queue -> Lambda, DLQ resumerank-dlq) or directly by S3.
 Key convention (INTERFACES.md): resumes/{jobId}/{candidateId}.pdf
 """
 
@@ -55,6 +56,11 @@ candidates_table = dynamodb.Table(CANDIDATES_TABLE)
 
 class ProcessingError(Exception):
     """A failure that should be recorded on the candidate as status FAILED."""
+
+
+class RetryableError(Exception):
+    """A transient failure (e.g. DynamoDB unavailable). From SQS the message is retried, and after
+    maxReceiveCount attempts it moves to the dead-letter queue instead of being lost."""
 
 
 class TextractUnavailable(Exception):
@@ -323,7 +329,7 @@ def notify(job, candidate, result):
 
 # ---------------------------------------------------------------- handler
 
-def process_record(record, context):
+def process_record(record, context, retryable=False):
     bucket = record["s3"]["bucket"]["name"]
     key = unquote_plus(record["s3"]["object"]["key"])
     job_id, candidate_id = parse_key(key)
@@ -338,6 +344,8 @@ def process_record(record, context):
             candidate = candidates_table.get_item(
                 Key={"jobId": job_id, "candidateId": candidate_id}).get("Item") or {}
         except Exception as e:
+            if retryable:
+                raise RetryableError(f"dynamodb read failed: {e}") from e
             raise ProcessingError(f"dynamodb read failed: {e}") from e
         if not job:
             raise ProcessingError(f"job {job_id} not found")
@@ -361,6 +369,8 @@ def process_record(record, context):
         try:
             save_scored(job_id, candidate_id, key, result, text)
         except Exception as e:
+            if retryable:
+                raise RetryableError(f"dynamodb update failed: {e}") from e
             raise ProcessingError(f"dynamodb update failed: {e}") from e
 
         put_score_metric(result["score"])
@@ -368,6 +378,8 @@ def process_record(record, context):
             notify(job, candidate, result)
         return {"key": key, "status": "SCORED", "score": result["score"]}
 
+    except RetryableError:
+        raise
     except ProcessingError as e:
         logger.error("FAILED %s: %s", key, e)
         save_failed(job_id, candidate_id, key, str(e))
@@ -378,7 +390,33 @@ def process_record(record, context):
         return {"key": key, "status": "FAILED", "reason": str(e)}
 
 
+def s3_records_from_sqs(message):
+    """An SQS message body is the S3 event notification JSON. S3's setup test event has no Records."""
+    body = json.loads(message["body"])
+    if body.get("Event") == "s3:TestEvent":
+        logger.info("s3 test event from %s; nothing to do", body.get("Bucket"))
+        return []
+    return [r for r in body.get("Records", []) if "s3" in r]
+
+
+def handle_sqs(event, context):
+    """S3 -> SQS -> Lambda. Reports partial batch failures so only the failed messages are retried."""
+    results, failures = [], []
+    for message in event["Records"]:
+        try:
+            for record in s3_records_from_sqs(message):
+                results.append(process_record(record, context, retryable=True))
+        except (RetryableError, ValueError, KeyError) as e:
+            logger.error("message %s will be retried (then dead-lettered): %s", message.get("messageId"), e)
+            failures.append({"itemIdentifier": message["messageId"]})
+    logger.info("done: %s; retrying %d message(s)", json.dumps(results), len(failures))
+    return {"batchItemFailures": failures, "results": results}
+
+
 def lambda_handler(event, context):
-    results = [process_record(r, context) for r in event.get("Records", []) if "s3" in r]
+    records = event.get("Records", [])
+    if records and records[0].get("eventSource") == "aws:sqs":
+        return handle_sqs(event, context)
+    results = [process_record(r, context) for r in records if "s3" in r]   # direct S3 trigger
     logger.info("done: %s", json.dumps(results))
     return {"results": results}
