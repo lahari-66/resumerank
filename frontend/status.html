@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResumeRank – Track Application</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="narrow">
+    <section class="card">
+      <h2>Track your application</h2>
+      <form id="lookup" novalidate>
+        <div class="row">
+          <div>
+            <label for="job-id">Job ID</label>
+            <input type="text" id="job-id" class="mono" required>
+          </div>
+          <div>
+            <label for="candidate-id">Your reference</label>
+            <input type="text" id="candidate-id" class="mono" required>
+          </div>
+        </div>
+        <button type="submit">Check status</button>
+      </form>
+      <div class="message" id="message" role="status"></div>
+    </section>
+
+    <section class="card hidden" id="result">
+      <h2 id="r-title"></h2>
+      <p class="meta" id="r-meta"></p>
+
+      <div id="r-pending" class="hidden" style="text-align:center">
+        <div class="spinner"></div>
+        <p>Your resume is in the queue and being processed. This page refreshes automatically.</p>
+      </div>
+
+      <div id="r-failed" class="hidden">
+        <div class="message error show" id="r-reason"></div>
+        <p class="meta">Tip: export your resume to PDF directly from Word, Google Docs or LaTeX so it contains
+          selectable text, then upload it again.</p>
+      </div>
+
+      <div id="r-scored" class="hidden">
+        <div class="grid grid-2" style="align-items:center">
+          <div>
+            <div class="ring" id="r-ring"><div><div><div class="num" id="r-score"></div><div class="meta">out of 100</div></div></div></div>
+          </div>
+          <div class="breakdown" id="r-breakdown"></div>
+        </div>
+        <h3 style="margin-top:20px">Skills we found</h3>
+        <div id="r-matched"></div>
+        <h3 style="margin-top:16px">Skills the job asks for that we did not find</h3>
+        <div id="r-missing"></div>
+        <p class="meta" id="r-advice" style="margin-top:12px"></p>
+      </div>
+    </section>
+
+    <p class="meta">The score shows how closely your resume, as written, matches the job's stated requirements.
+      A recruiter reviews every application; nobody is rejected automatically.</p>
+  </main>
+
+  <footer>ResumeRank · course project · serverless on AWS</footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    RR.nav("status.html");
+    const $ = (id) => document.getElementById(id);
+    let timer = null;
+
+    function breakdownRow(label, value, max) {
+      const pct = Math.max(0, Math.min(100, (Number(value) || 0) / max * 100));
+      return [
+        RR.el("span", { text: label }),
+        RR.el("div", { cls: "bar" }, [RR.el("span", { attrs: { style: "width:" + pct + "%" } })]),
+        RR.el("span", { text: (value ?? 0) + " / " + max, cls: "meta" }),
+      ];
+    }
+
+    function render(d) {
+      $("result").classList.remove("hidden");
+      $("r-title").textContent = d.job.title;
+      $("r-meta").textContent = (d.name || "") + " · submitted " + RR.when(d.submittedAt) +
+        (d.processedAt ? " · processed " + RR.when(d.processedAt) : "");
+      ["r-pending", "r-failed", "r-scored"].forEach((id) => $(id).classList.add("hidden"));
+
+      if (d.status === "PENDING") { $("r-pending").classList.remove("hidden"); return; }
+      clearInterval(timer);
+      if (d.status === "FAILED") {
+        $("r-failed").classList.remove("hidden");
+        $("r-reason").textContent = "We could not read this resume: " + (d.failureReason || "unknown error");
+        return;
+      }
+      $("r-scored").classList.remove("hidden");
+      $("r-score").textContent = d.score;
+      const ring = $("r-ring");
+      ring.style.setProperty("--p", d.score);
+      ring.style.setProperty("--c", d.score >= 75 ? "var(--high)" : d.score >= 50 ? "var(--mid)" : "var(--low)");
+      $("r-breakdown").replaceChildren(
+        ...breakdownRow("Skills", d.skillScore, 60),
+        ...breakdownRow("Experience", d.expScore, 20),
+        ...breakdownRow("Education", d.eduScore, 20),
+      );
+      $("r-matched").replaceChildren(RR.chips(d.matchedSkills, "match", "none of the required skills"));
+      $("r-missing").replaceChildren(RR.chips(d.missingSkills, "miss", "nothing – every required skill was found"));
+      $("r-advice").textContent = d.missingSkills.length
+        ? "If you do have experience with " + d.missingSkills.join(", ") +
+          ", make it explicit in your resume (a skills section or a project line) so it can be recognised."
+        : "Your resume covers every required skill for this role.";
+    }
+
+    async function check() {
+      const jobId = $("job-id").value.trim();
+      const candidateId = $("candidate-id").value.trim();
+      if (!jobId || !candidateId) { RR.show($("message"), "Enter both the job ID and your reference.", "error"); return; }
+      try {
+        const d = await RR.api("/status?jobId=" + encodeURIComponent(jobId) + "&candidateId=" + encodeURIComponent(candidateId));
+        RR.hide($("message"));
+        render(d);
+      } catch (e) {
+        clearInterval(timer);
+        $("result").classList.add("hidden");
+        RR.show($("message"), "Could not find that application: " + e.message, "error");
+      }
+    }
+
+    function start() {
+      clearInterval(timer);
+      check();
+      timer = setInterval(check, 3000);
+    }
+
+    $("lookup").addEventListener("submit", (e) => { e.preventDefault(); start(); });
+    $("job-id").value = RR.param("jobId");
+    $("candidate-id").value = RR.param("candidateId");
+    if ($("job-id").value && $("candidate-id").value) start();
+  </script>
+</body>
+</html>

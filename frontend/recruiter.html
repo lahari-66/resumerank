@@ -3,253 +3,525 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ResumeRank – Recruiter</title>
+  <title>ResumeRank – Recruiter Dashboard</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
-  <header>
-    <h1>ResumeRank</h1>
-    <span>Recruiter dashboard</span>
-  </header>
-
   <main>
-    <section class="card">
-      <h2>Post a job</h2>
-      <form id="job-form" novalidate>
-        <div class="row">
-          <div>
-            <label for="title">Job title</label>
-            <input type="text" id="title" maxlength="200" required placeholder="Cloud Engineer Intern">
-          </div>
-          <div>
-            <label for="recruiter-email">Recruiter email</label>
-            <input type="email" id="recruiter-email" maxlength="200" required>
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label for="skills">Required skills</label>
-            <input type="text" id="skills" required placeholder="python, aws, docker, linux, sql">
-            <p class="hint">Comma-separated. Aliases such as “JS” or “Amazon Web Services” are matched automatically.</p>
-          </div>
-          <div style="flex: 0 1 180px">
-            <label for="min-years">Minimum years</label>
-            <input type="number" id="min-years" min="0" max="15" value="0" required>
-          </div>
-        </div>
-        <button type="submit" id="job-submit">Create job</button>
+    <!-- access key gate -->
+    <section class="card hidden" id="gate" style="max-width:520px; margin:40px auto">
+      <h2>Recruiter sign-in</h2>
+      <p class="meta">Enter the recruiter access key configured on the API.</p>
+      <form id="gate-form">
+        <label for="gate-key">Access key</label>
+        <input type="password" id="gate-key" autocomplete="current-password" required>
+        <button type="submit">Unlock dashboard</button>
       </form>
-      <div class="message" id="job-message" role="status"></div>
+      <div class="message" id="gate-message"></div>
     </section>
 
-    <section class="card">
-      <h2>Leaderboard</h2>
-      <div class="row" style="align-items: flex-end">
-        <div>
-          <label for="job-id">Job ID</label>
-          <input type="text" id="job-id" class="mono" placeholder="created above, or paste an existing job id">
+    <div class="split hidden" id="app">
+      <!-- sidebar: jobs -->
+      <aside class="card" style="padding:16px">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <h2 style="margin:0">Jobs</h2>
+          <button class="small" id="new-job-btn">+ New job</button>
         </div>
-        <div style="flex: 0 0 auto">
-          <button type="button" id="load" class="secondary">Load</button>
+        <ul class="job-list" id="job-list" style="margin-top:12px"><li class="meta">Loading…</li></ul>
+        <button class="ghost small" id="sign-out" style="margin-top:12px">Sign out</button>
+      </aside>
+
+      <section>
+        <!-- new job -->
+        <div class="card hidden" id="job-form-card">
+          <h2>Post a new job</h2>
+          <form id="job-form" novalidate>
+            <div class="row">
+              <div>
+                <label for="title">Job title</label>
+                <input type="text" id="title" maxlength="200" required placeholder="Cloud Engineer Intern">
+              </div>
+              <div>
+                <label for="recruiter-email">Recruiter email</label>
+                <input type="email" id="recruiter-email" maxlength="200" required>
+              </div>
+              <div style="flex:0 1 150px">
+                <label for="min-years">Minimum years</label>
+                <input type="number" id="min-years" min="0" max="15" value="0" required>
+              </div>
+            </div>
+            <label for="description">Job description (optional)</label>
+            <textarea id="description" maxlength="5000" placeholder="Paste the full job description – ResumeRank can pick the required skills out of it."></textarea>
+            <button type="button" class="secondary" id="extract">Extract skills from description</button>
+            <label for="skill-input">Required skills</label>
+            <div id="skill-chips" style="margin-bottom:6px"></div>
+            <input type="text" id="skill-input" placeholder="type a skill and press Enter (or comma)">
+            <p class="hint">Click a skill to remove it. Aliases such as “JS” or “Amazon Web Services” are matched automatically.</p>
+            <button type="submit" id="job-submit">Create job</button>
+          </form>
+          <div class="message" id="job-message"></div>
         </div>
-      </div>
 
-      <div id="job-info" style="display:none; margin-top: 16px">
-        <p><strong id="info-title"></strong> <span class="meta" id="info-meta"></span></p>
-        <p class="meta">Candidate upload link (share this):<br>
-          <a id="share-link" class="mono" target="_blank" rel="noopener"></a></p>
-      </div>
+        <!-- job view -->
+        <div id="job-view" class="hidden">
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap">
+              <div>
+                <h2 id="jv-title" style="margin-bottom:4px"></h2>
+                <p class="meta" id="jv-meta" style="margin:0 0 6px"></p>
+                <div id="jv-skills"></div>
+              </div>
+              <div style="min-width:240px">
+                <p class="meta" style="margin:0">Candidate application link</p>
+                <a id="share-link" class="mono" target="_blank" rel="noopener"></a>
+                <div><button class="small secondary" id="copy-link" style="margin-top:6px">Copy link</button></div>
+              </div>
+            </div>
+          </div>
 
-      <div class="legend" style="margin: 12px 0">
-        <span><span class="score high">75+</span> alert sent</span>
-        <span><span class="score mid">50–74</span></span>
-        <span><span class="score low">&lt;50</span></span>
-        <span id="refreshed"></span>
-      </div>
+          <div class="stats">
+            <div class="stat"><div class="value" id="s-total">0</div><div class="label">Applicants</div></div>
+            <div class="stat"><div class="value" id="s-avg">–</div><div class="label">Average score</div></div>
+            <div class="stat good"><div class="value" id="s-strong">0</div><div class="label">Score 75+ (alerted)</div></div>
+            <div class="stat good"><div class="value" id="s-short">0</div><div class="label">Shortlisted</div></div>
+            <div class="stat warn"><div class="value" id="s-pending">0</div><div class="label">Processing</div></div>
+            <div class="stat bad"><div class="value" id="s-failed">0</div><div class="label">Failed</div></div>
+          </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th><th>Name</th><th>Score</th><th>Breakdown</th>
-              <th>Matched</th><th>Missing</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr><td colspan="7" class="meta">Create or load a job to see candidates.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="message" id="board-message" role="status"></div>
-    </section>
+          <div class="grid grid-2">
+            <div class="card"><h3>Score distribution</h3><div class="chart-box"><canvas id="chart-scores"></canvas></div></div>
+            <div class="card"><h3>Skill gaps – required skills candidates are missing</h3><div class="chart-box"><canvas id="chart-gaps"></canvas></div></div>
+          </div>
 
-    <p class="meta">Scores rank resumes by stated fit to the job description (skills 60, experience 20,
-      education 20). They do not measure ability and must never be used to reject a candidate automatically.</p>
+          <div class="card">
+            <h3>Bulk upload</h3>
+            <div class="dropzone" id="bulk-drop">
+              <p style="margin:0 0 8px">Drop several PDF resumes here – each one is queued and scored in parallel.</p>
+              <input type="file" id="bulk-files" accept="application/pdf,.pdf" multiple>
+            </div>
+            <ul class="progress-list" id="bulk-progress"></ul>
+          </div>
+
+          <div class="card">
+            <div class="toolbar">
+              <input type="search" id="search" placeholder="Search name or skill…">
+              <select id="filter">
+                <option value="all">All candidates</option>
+                <option value="SCORED">Scored</option>
+                <option value="PENDING">Processing</option>
+                <option value="FAILED">Failed</option>
+                <option value="SHORTLISTED">Shortlisted</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="strong">Score 75+</option>
+              </select>
+              <button class="secondary" id="export">Export CSV</button>
+              <span class="meta" id="refreshed"></span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>#</th><th>Name</th><th>Score</th><th>Matched</th><th>Missing</th><th>Status</th><th>Decision</th><th></th></tr>
+                </thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+            <div class="message" id="board-message"></div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="empty-view">
+          <h2>Welcome</h2>
+          <p class="meta">Select a job on the left or post a new one.</p>
+        </div>
+      </section>
+    </div>
+
+    <p class="meta">Scores rank resumes by stated fit to the job description (skills 60, experience 20, education 20).
+      They do not measure ability and must never be used to reject a candidate automatically.</p>
   </main>
+
+  <!-- candidate drawer -->
+  <div class="drawer-backdrop hidden" id="backdrop"></div>
+  <aside class="drawer hidden" id="drawer" aria-label="Candidate details">
+    <button class="secondary small" id="drawer-close" style="float:right">Close</button>
+    <h2 id="d-name"></h2>
+    <p class="meta" id="d-meta"></p>
+    <div style="display:flex; align-items:center; gap:12px; margin:10px 0">
+      <span id="d-score"></span><span id="d-status"></span><span id="d-decision"></span>
+    </div>
+    <div class="breakdown" id="d-breakdown"></div>
+    <h3 style="margin-top:16px">Matched skills</h3><div id="d-matched"></div>
+    <h3 style="margin-top:12px">Missing skills</h3><div id="d-missing"></div>
+    <div id="d-failure" class="message error"></div>
+    <h3 style="margin-top:16px">Extracted text (preview)</h3><pre id="d-preview"></pre>
+    <div class="toolbar">
+      <button id="d-view">View resume PDF</button>
+      <button class="ok" id="d-short">Shortlist</button>
+      <button class="danger" id="d-reject">Reject</button>
+      <button class="secondary" id="d-clear">Clear decision</button>
+    </div>
+    <div class="message" id="d-message"></div>
+  </aside>
 
   <footer>ResumeRank · course project · serverless on AWS</footer>
 
   <script src="config.js"></script>
+  <script src="app.js"></script>
   <script>
-    const API = ((window.RESUMERANK_CONFIG || {}).apiBaseUrl || "").replace(/\/+$/, "");
-    const REFRESH_MS = 5000;
-    let currentJob = "";
-    let timer = null;
-
+    RR.nav("recruiter.html");
     const $ = (id) => document.getElementById(id);
+    const REFRESH_MS = 5000;
+    const state = { jobs: [], jobId: "", data: null, timer: null, skills: [], drawer: null, charts: {} };
 
-    function show(el, text, kind) {
-      el.textContent = text;
-      el.className = "message show " + kind;
+    // ------------------------------------------------------------ access key
+    function showGate(text) {
+      clearInterval(state.timer);
+      $("app").classList.add("hidden");
+      $("gate").classList.remove("hidden");
+      if (text) RR.show($("gate-message"), text, "error");
     }
-    function hide(el) { el.className = "message"; }
-
-    async function api(path, options) {
-      const res = await fetch(API + path, options);
-      let data = {};
-      try { data = await res.json(); } catch (e) { /* empty body */ }
-      if (!res.ok) throw new Error(data.error || ("request failed with status " + res.status));
-      return data;
-    }
-
-    // every value from the API is inserted with textContent, never innerHTML
-    function el(tag, text, className) {
-      const node = document.createElement(tag);
-      if (text !== undefined && text !== null) node.textContent = text;
-      if (className) node.className = className;
-      return node;
-    }
-
-    function chips(list, kind) {
-      const td = el("td");
-      if (!list || !list.length) { td.appendChild(el("span", "–", "meta")); return td; }
-      list.forEach((s) => td.appendChild(el("span", s, "chip " + kind)));
-      return td;
-    }
-
-    function band(score) {
-      if (score >= 75) return "high";
-      if (score >= 50) return "mid";
-      return "low";
-    }
-
-    function renderRows(candidates) {
-      const body = $("rows");
-      body.replaceChildren();
-      if (!candidates.length) {
-        const tr = el("tr");
-        const td = el("td", "No candidates yet – share the upload link.", "meta");
-        td.colSpan = 7;
-        tr.appendChild(td);
-        body.appendChild(tr);
-        return;
+    async function guarded(fn) {
+      try { return await fn(); }
+      catch (e) {
+        if (e.status === 401) { RR.setRecruiterKey(""); showGate("Access key missing or wrong."); }
+        throw e;
       }
-      candidates.forEach((c) => {
-        const tr = el("tr");
-        const scored = c.status === "SCORED";
-        tr.appendChild(el("td", scored ? String(c.rank) : "–"));
+    }
+    $("gate-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      RR.setRecruiterKey($("gate-key").value.trim());
+      $("gate").classList.add("hidden");
+      $("app").classList.remove("hidden");
+      await boot();
+    });
+    $("sign-out").addEventListener("click", () => { RR.setRecruiterKey(""); showGate(); });
 
-        const nameTd = el("td");
-        nameTd.appendChild(el("div", c.name || "(no name)"));
-        if (c.textPreview) {
-          const d = el("details");
-          d.appendChild(el("summary", "OCR preview"));
-          d.appendChild(el("p", c.textPreview));
-          nameTd.appendChild(d);
-        }
-        tr.appendChild(nameTd);
-
-        const scoreTd = el("td");
-        scoreTd.appendChild(el("span", scored ? String(c.score) : "–", "score " + (scored ? band(c.score) : "none")));
-        tr.appendChild(scoreTd);
-
-        tr.appendChild(el("td", scored
-          ? `skills ${c.skillScore} · exp ${c.expScore} · edu ${c.eduScore}` +
-            (c.yearsExperience != null ? ` · ${c.yearsExperience} yrs` : "")
-          : "", "meta"));
-        tr.appendChild(chips(c.matchedSkills, "match"));
-        tr.appendChild(chips(c.missingSkills, "miss"));
-
-        const statusTd = el("td");
-        statusTd.appendChild(el("span", c.status, "status " + c.status));
-        if (c.failureReason) statusTd.appendChild(el("div", c.failureReason, "meta"));
-        tr.appendChild(statusTd);
-
-        body.appendChild(tr);
+    // ------------------------------------------------------------ jobs sidebar
+    async function loadJobs() {
+      const data = await RR.api("/jobs");
+      state.jobs = data.jobs;
+      const list = $("job-list");
+      list.replaceChildren();
+      if (!data.jobs.length) list.appendChild(RR.el("li", { cls: "meta", text: "No jobs yet." }));
+      data.jobs.forEach((j) => {
+        list.appendChild(RR.el("li", { cls: j.jobId === state.jobId ? "active" : "", on: { click: () => selectJob(j.jobId) } }, [
+          RR.el("div", { cls: "title", text: j.title }),
+          RR.el("div", { cls: "meta", text: `${j.candidateCount} applicant(s) · ${RR.when(j.createdAt).split(",")[0]}` }),
+        ]));
       });
     }
 
-    async function refresh() {
-      if (!currentJob) return;
-      try {
-        const data = await api("/candidates?jobId=" + encodeURIComponent(currentJob));
-        $("job-info").style.display = "block";
-        $("info-title").textContent = data.job.title;
-        $("info-meta").textContent = " · skills: " + data.job.requiredSkills.join(", ") +
-          " · min " + data.job.minYears + " yr(s) · " + data.count + " candidate(s)";
-        renderRows(data.candidates);
-        $("refreshed").textContent = "updated " + new Date().toLocaleTimeString() + " · refreshes every 5 s";
-        hide($("board-message"));
-      } catch (e) {
-        show($("board-message"), "Could not load candidates: " + e.message, "error");
+    function showPanel(which) {
+      ["job-form-card", "job-view", "empty-view"].forEach((id) => $(id).classList.toggle("hidden", id !== which));
+    }
+
+    // ------------------------------------------------------------ new job form
+    function renderSkillChips() {
+      const box = $("skill-chips");
+      box.replaceChildren();
+      state.skills.forEach((s) => box.appendChild(RR.el("span", {
+        cls: "chip neutral removable", text: s, attrs: { title: "remove" },
+        on: { click: () => { state.skills = state.skills.filter((x) => x !== s); renderSkillChips(); } },
+      })));
+    }
+    function addSkills(list) {
+      list.map((s) => s.trim().toLowerCase()).filter(Boolean).forEach((s) => {
+        if (!state.skills.includes(s)) state.skills.push(s);
+      });
+      renderSkillChips();
+    }
+    $("skill-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
+        addSkills(e.target.value.split(","));
+        e.target.value = "";
       }
-    }
-
-    function selectJob(jobId) {
-      currentJob = jobId.trim();
-      if (!currentJob) return;
-      $("job-id").value = currentJob;
-      const url = new URL(location.href);
-      url.searchParams.set("jobId", currentJob);
-      history.replaceState(null, "", url);
-      try { localStorage.setItem("resumerank.jobId", currentJob); } catch (e) { /* storage blocked */ }
-
-      const share = new URL("upload.html", location.href);
-      share.search = "?jobId=" + encodeURIComponent(currentJob);
-      $("share-link").href = share.href;
-      $("share-link").textContent = share.href;
-
-      clearInterval(timer);
-      refresh();
-      timer = setInterval(refresh, REFRESH_MS);
-    }
-
-    $("job-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const msg = $("job-message");
-      if (!API) { show(msg, "config.js is missing the API URL.", "error"); return; }
-      const skills = $("skills").value.split(",").map((s) => s.trim()).filter(Boolean);
+    });
+    $("new-job-btn").addEventListener("click", () => {
+      clearInterval(state.timer);
+      state.jobId = "";
+      state.skills = [];
+      renderSkillChips();
+      $("job-form").reset();
+      RR.hide($("job-message"));
+      showPanel("job-form-card");
+      loadJobs();
+    });
+    $("extract").addEventListener("click", async () => {
+      const text = $("description").value.trim();
+      if (!text) { RR.show($("job-message"), "Paste a job description first.", "error"); return; }
+      try {
+        const out = await RR.api("/skills/extract", { method: "POST", body: { text } });
+        addSkills(out.skills);
+        RR.show($("job-message"), out.count ? `Found ${out.count} skill(s) – remove any you do not need.` : "No known skills found – add them by hand.", out.count ? "ok" : "info");
+      } catch (e) { RR.show($("job-message"), "Could not extract skills: " + e.message, "error"); }
+    });
+    $("job-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      addSkills($("skill-input").value.split(","));
+      $("skill-input").value = "";
       const body = {
         title: $("title").value.trim(),
         recruiterEmail: $("recruiter-email").value.trim(),
-        requiredSkills: skills,
         minYears: parseInt($("min-years").value, 10) || 0,
+        requiredSkills: state.skills,
+        description: $("description").value.trim(),
       };
-      if (!body.title || !body.recruiterEmail || !skills.length) {
-        show(msg, "Title, recruiter email and at least one skill are required.", "error");
+      if (!body.title || !body.recruiterEmail || !body.requiredSkills.length) {
+        RR.show($("job-message"), "Title, recruiter email and at least one skill are required.", "error");
         return;
       }
       $("job-submit").disabled = true;
       try {
-        const job = await api("/jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        show(msg, "Job created: " + job.jobId, "ok");
+        const job = await guarded(() => RR.api("/jobs", { method: "POST", body, recruiter: true }));
+        await loadJobs();
         selectJob(job.jobId);
-      } catch (e) {
-        show(msg, "Could not create job: " + e.message, "error");
-      } finally {
-        $("job-submit").disabled = false;
-      }
+      } catch (err) {
+        if (err.status !== 401) RR.show($("job-message"), "Could not create job: " + err.message, "error");
+      } finally { $("job-submit").disabled = false; }
     });
 
-    $("load").addEventListener("click", () => selectJob($("job-id").value));
+    // ------------------------------------------------------------ job view
+    function selectJob(jobId) {
+      state.jobId = jobId;
+      state.data = null;
+      $("rows").replaceChildren();
+      $("bulk-progress").replaceChildren();
+      showPanel("job-view");
+      const url = new URL(location.href);
+      url.searchParams.set("jobId", jobId);
+      history.replaceState(null, "", url);
+      const share = new URL("upload.html", location.href);
+      share.search = "?jobId=" + encodeURIComponent(jobId);
+      $("share-link").href = share.href;
+      $("share-link").textContent = share.href;
+      document.querySelectorAll("#job-list li").forEach((li, i) => li.classList.toggle("active", state.jobs[i] && state.jobs[i].jobId === jobId));
+      clearInterval(state.timer);
+      refresh();
+      state.timer = setInterval(refresh, REFRESH_MS);
+    }
+    $("copy-link").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText($("share-link").href));
 
-    let initial = new URLSearchParams(location.search).get("jobId");
-    if (!initial) { try { initial = localStorage.getItem("resumerank.jobId"); } catch (e) { /* ignore */ } }
-    if (initial) selectJob(initial);
+    async function refresh() {
+      if (!state.jobId) return;
+      try {
+        const data = await guarded(() => RR.api("/candidates?jobId=" + encodeURIComponent(state.jobId), { recruiter: true }));
+        state.data = data;
+        renderJob(data);
+        $("refreshed").textContent = "updated " + new Date().toLocaleTimeString() + " · every 5 s";
+        RR.hide($("board-message"));
+        if (state.drawer) {
+          const c = data.candidates.find((x) => x.candidateId === state.drawer);
+          if (c) fillDrawer(c);
+        }
+      } catch (e) {
+        if (e.status !== 401) RR.show($("board-message"), "Could not load candidates: " + e.message, "error");
+      }
+    }
+
+    function renderJob(data) {
+      const job = data.job;
+      $("jv-title").textContent = job.title;
+      $("jv-meta").textContent = `Minimum ${job.minYears} year(s) · created ${RR.when(job.createdAt)}`;
+      $("jv-skills").replaceChildren(RR.chips(job.requiredSkills, "neutral"));
+
+      const cs = data.candidates;
+      const scored = cs.filter((c) => c.status === "SCORED");
+      $("s-total").textContent = cs.length;
+      $("s-avg").textContent = scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length) : "–";
+      $("s-strong").textContent = scored.filter((c) => c.score >= 75).length;
+      $("s-short").textContent = cs.filter((c) => c.decision === "SHORTLISTED").length;
+      $("s-pending").textContent = cs.filter((c) => c.status === "PENDING").length;
+      $("s-failed").textContent = cs.filter((c) => c.status === "FAILED").length;
+
+      renderCharts(job, scored);
+      renderRows();
+    }
+
+    function renderCharts(job, scored) {
+      if (!window.Chart) return;
+      const bins = [0, 0, 0, 0, 0];
+      scored.forEach((c) => { bins[Math.min(4, Math.floor(c.score / 20))] += 1; });
+      const skills = (job.requiredSkills || []).slice();
+      const gaps = skills.map((s) => scored.filter((c) => (c.missingSkills || []).includes(s)).length);
+      const scoreData = { labels: ["0–19", "20–39", "40–59", "60–79", "80–100"],
+        datasets: [{ label: "candidates", data: bins, backgroundColor: ["#fca5a5", "#fca5a5", "#fcd34d", "#86efac", "#22c55e"] }] };
+      const gapData = { labels: skills, datasets: [{ label: "candidates missing this skill", data: gaps, backgroundColor: "#f87171" }] };
+      const opts = (horizontal) => ({ responsive: true, maintainAspectRatio: false, animation: false,
+        indexAxis: horizontal ? "y" : "x", plugins: { legend: { display: false } },
+        scales: { [horizontal ? "x" : "y"]: { beginAtZero: true, ticks: { precision: 0 } } } });
+      for (const [key, canvas, data, horizontal] of [["scores", "chart-scores", scoreData, false], ["gaps", "chart-gaps", gapData, true]]) {
+        if (state.charts[key] && state.charts[key].canvas.dataset.job === state.jobId) {
+          state.charts[key].data = data;
+          state.charts[key].update();
+        } else {
+          if (state.charts[key]) state.charts[key].destroy();
+          $(canvas).dataset.job = state.jobId;
+          state.charts[key] = new Chart($(canvas), { type: "bar", data, options: opts(horizontal) });
+        }
+      }
+    }
+
+    function filtered() {
+      if (!state.data) return [];
+      const q = $("search").value.trim().toLowerCase();
+      const f = $("filter").value;
+      return state.data.candidates.filter((c) => {
+        if (f === "strong" && !(c.status === "SCORED" && c.score >= 75)) return false;
+        if (["SCORED", "PENDING", "FAILED"].includes(f) && c.status !== f) return false;
+        if (["SHORTLISTED", "REJECTED"].includes(f) && c.decision !== f) return false;
+        if (!q) return true;
+        return [c.name, c.email, ...(c.matchedSkills || []), ...(c.missingSkills || [])]
+          .some((v) => v && String(v).toLowerCase().includes(q));
+      });
+    }
+
+    function renderRows() {
+      const body = $("rows");
+      body.replaceChildren();
+      const rows = filtered();
+      if (!rows.length) {
+        const td = RR.el("td", { cls: "meta", text: state.data && state.data.count ? "No candidates match this filter." : "No candidates yet – share the application link or use bulk upload." });
+        td.colSpan = 8;
+        body.appendChild(RR.el("tr", {}, [td]));
+        return;
+      }
+      rows.forEach((c) => {
+        const decision = c.decision && c.decision !== "NONE" ? RR.el("span", { cls: "decision " + c.decision, text: c.decision }) : RR.el("span", { cls: "meta", text: "–" });
+        body.appendChild(RR.el("tr", {}, [
+          RR.el("td", { text: c.status === "SCORED" ? c.rank : "–" }),
+          RR.el("td", {}, [RR.el("div", { text: c.name || "(no name)" }), RR.el("div", { cls: "meta", text: c.email || "" })]),
+          RR.el("td", {}, [RR.scoreBadge(c)]),
+          RR.el("td", {}, [RR.chips(c.matchedSkills, "match")]),
+          RR.el("td", {}, [RR.chips(c.missingSkills, "miss")]),
+          RR.el("td", {}, [RR.el("span", { cls: "status " + c.status, text: c.status })]),
+          RR.el("td", {}, [decision]),
+          RR.el("td", {}, [RR.el("button", { cls: "small secondary", text: "Details", on: { click: () => openDrawer(c) } })]),
+        ]));
+      });
+    }
+    $("search").addEventListener("input", renderRows);
+    $("filter").addEventListener("change", renderRows);
+
+    // ------------------------------------------------------------ CSV export
+    $("export").addEventListener("click", () => {
+      const rows = filtered();
+      if (!rows.length) return;
+      const cols = ["rank", "name", "email", "status", "score", "skillScore", "expScore", "eduScore",
+                    "yearsExperience", "matchedSkills", "missingSkills", "decision", "processedAt", "failureReason"];
+      const cell = (v) => {
+        const s = Array.isArray(v) ? v.join("; ") : (v ?? "");
+        return /[",\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
+      };
+      const csv = [cols.join(","), ...rows.map((r) => cols.map((k) => cell(r[k])).join(","))].join("\r\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const a = RR.el("a", { attrs: { href: URL.createObjectURL(blob), download: (state.data.job.title || "candidates").replace(/[^\w-]+/g, "_") + ".csv" } });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
+
+    // ------------------------------------------------------------ bulk upload
+    async function bulkUpload(files) {
+      const list = $("bulk-progress");
+      const pdfs = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+      const items = pdfs.map((f) => {
+        const status = RR.el("span", { cls: "meta", text: "waiting" });
+        list.appendChild(RR.el("li", {}, [RR.el("span", { text: f.name }), status]));
+        return { f, status };
+      });
+      const queue = items.slice();
+      async function worker() {
+        while (queue.length) {
+          const { f, status } = queue.shift();
+          if (f.size > 5 * 1024 * 1024) { status.textContent = "too large (5 MB max)"; continue; }
+          status.textContent = "uploading…";
+          try {
+            await RR.uploadResume(state.jobId, f, f.name.replace(/\.pdf$/i, "").slice(0, 200));
+            status.textContent = "queued ✓";
+          } catch (e) { status.textContent = "failed: " + e.message; }
+        }
+      }
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      refresh();
+      loadJobs();
+    }
+    $("bulk-files").addEventListener("change", (e) => { bulkUpload(e.target.files); e.target.value = ""; });
+    const drop = $("bulk-drop");
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => bulkUpload(e.dataTransfer.files));
+
+    // ------------------------------------------------------------ candidate drawer
+    function breakdownRow(label, value, max) {
+      const pct = Math.max(0, Math.min(100, (Number(value) || 0) / max * 100));
+      return [RR.el("span", { text: label }),
+              RR.el("div", { cls: "bar" }, [RR.el("span", { attrs: { style: "width:" + pct + "%" } })]),
+              RR.el("span", { cls: "meta", text: (value ?? 0) + " / " + max })];
+    }
+    function fillDrawer(c) {
+      $("d-name").textContent = c.name || "(no name)";
+      $("d-meta").textContent = [c.email, c.yearsExperience != null ? c.yearsExperience + " yrs experience (est.)" : null,
+        "submitted " + RR.when(c.createdAt), c.processedAt ? "processed " + RR.when(c.processedAt) : null].filter(Boolean).join(" · ");
+      $("d-score").replaceChildren(RR.scoreBadge(c));
+      $("d-status").replaceChildren(RR.el("span", { cls: "status " + c.status, text: c.status }));
+      $("d-decision").replaceChildren(c.decision && c.decision !== "NONE" ? RR.el("span", { cls: "decision " + c.decision, text: c.decision }) : RR.el("span"));
+      $("d-breakdown").replaceChildren(...breakdownRow("Skills", c.skillScore, 60), ...breakdownRow("Experience", c.expScore, 20), ...breakdownRow("Education", c.eduScore, 20));
+      $("d-matched").replaceChildren(RR.chips(c.matchedSkills, "match"));
+      $("d-missing").replaceChildren(RR.chips(c.missingSkills, "miss"));
+      if (c.failureReason) RR.show($("d-failure"), c.failureReason, "error"); else RR.hide($("d-failure"));
+      $("d-preview").textContent = c.textPreview || "(no text extracted yet)";
+    }
+    function openDrawer(c) {
+      state.drawer = c.candidateId;
+      RR.hide($("d-message"));
+      fillDrawer(c);
+      $("drawer").classList.remove("hidden");
+      $("backdrop").classList.remove("hidden");
+    }
+    function closeDrawer() {
+      state.drawer = null;
+      $("drawer").classList.add("hidden");
+      $("backdrop").classList.add("hidden");
+    }
+    $("drawer-close").addEventListener("click", closeDrawer);
+    $("backdrop").addEventListener("click", closeDrawer);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+    $("d-view").addEventListener("click", async () => {
+      const win = window.open("", "_blank");
+      try {
+        const out = await guarded(() => RR.api(`/resume-url?jobId=${encodeURIComponent(state.jobId)}&candidateId=${encodeURIComponent(state.drawer)}`, { recruiter: true }));
+        if (win) win.location = out.url; else location.href = out.url;
+      } catch (e) {
+        if (win) win.close();
+        RR.show($("d-message"), "Could not open resume: " + e.message, "error");
+      }
+    });
+    async function decide(decision) {
+      try {
+        await guarded(() => RR.api("/decision", { method: "POST", recruiter: true,
+          body: { jobId: state.jobId, candidateId: state.drawer, decision } }));
+        RR.show($("d-message"), decision === "NONE" ? "Decision cleared." : "Marked as " + decision.toLowerCase() + ".", "ok");
+        refresh();
+      } catch (e) { RR.show($("d-message"), "Could not save decision: " + e.message, "error"); }
+    }
+    $("d-short").addEventListener("click", () => decide("SHORTLISTED"));
+    $("d-reject").addEventListener("click", () => decide("REJECTED"));
+    $("d-clear").addEventListener("click", () => decide("NONE"));
+
+    // ------------------------------------------------------------ start
+    async function boot() {
+      try { await loadJobs(); } catch (e) { RR.show($("board-message"), "Could not load jobs: " + e.message, "error"); }
+      const wanted = RR.param("jobId");
+      if (wanted) selectJob(wanted);
+      else if (state.jobs.length) selectJob(state.jobs[0].jobId);
+      else $("new-job-btn").click();
+    }
+
+    if (RR.recruiterKey()) { $("app").classList.remove("hidden"); boot(); }
+    else showGate();
   </script>
 </body>
 </html>

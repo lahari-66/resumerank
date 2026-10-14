@@ -3,27 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ResumeRank – Upload Resume</title>
+  <title>ResumeRank – Apply</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <h1>ResumeRank</h1>
-    <span>Candidate upload</span>
-  </header>
-
-  <main>
-    <section class="card" id="job-card">
-      <h2 id="job-title">Loading job…</h2>
-      <p class="meta" id="job-meta"></p>
+  <main class="narrow">
+    <section class="card">
+      <h2>Choose a position</h2>
+      <select id="job-select"><option value="">Loading open positions…</option></select>
+      <div id="job-info" class="hidden" style="margin-top:14px">
+        <h3 id="job-title"></h3>
+        <p class="meta" id="job-meta"></p>
+        <div id="job-skills"></div>
+        <p class="meta" id="job-description" style="white-space:pre-wrap; margin-top:10px"></p>
+      </div>
     </section>
 
     <section class="card">
       <h2>Submit your resume</h2>
       <form id="upload-form" novalidate>
-        <label for="job-id">Job ID</label>
-        <input type="text" id="job-id" class="mono" required placeholder="paste the job id from the recruiter">
-
         <div class="row">
           <div>
             <label for="name">Full name</label>
@@ -34,105 +32,112 @@
             <input type="email" id="email" maxlength="200" required>
           </div>
         </div>
-
         <label for="file">Resume (PDF, up to 5 MB)</label>
-        <input type="file" id="file" accept="application/pdf,.pdf" required>
-
+        <div class="dropzone" id="drop">
+          <p style="margin:0 0 8px">Drag your PDF here or choose a file</p>
+          <input type="file" id="file" accept="application/pdf,.pdf" required>
+        </div>
+        <p class="hint">Text-based PDFs (exported from Word, Google Docs or LaTeX) work best.</p>
         <button type="submit" id="submit">Upload resume</button>
       </form>
       <div class="message" id="message" role="status"></div>
+      <div id="tracking" class="hidden" style="margin-top:12px">
+        <p>Keep this link to follow your application:</p>
+        <a id="track-link" class="btn secondary" href="#">Track my application</a>
+        <p class="meta">Reference: <span class="mono" id="reference"></span></p>
+      </div>
     </section>
 
-    <p class="meta">Your resume is stored privately and deleted automatically after 7 days. The score
-      only orders resumes for a human recruiter to review; it is not a hiring decision.</p>
+    <p class="meta">Your resume is stored privately and deleted automatically after 7 days. The score only orders
+      resumes for a human recruiter to review; it is not a hiring decision.</p>
   </main>
 
   <footer>ResumeRank · course project · serverless on AWS</footer>
 
   <script src="config.js"></script>
+  <script src="app.js"></script>
   <script>
-    const API = ((window.RESUMERANK_CONFIG || {}).apiBaseUrl || "").replace(/\/+$/, "");
+    RR.nav("upload.html");
     const MAX_BYTES = 5 * 1024 * 1024;
+    const $ = (id) => document.getElementById(id);
+    const select = $("job-select");
+    const msg = $("message");
 
-    const form = document.getElementById("upload-form");
-    const jobIdInput = document.getElementById("job-id");
-    const submitBtn = document.getElementById("submit");
-    const msg = document.getElementById("message");
-
-    function show(text, kind) {
-      msg.textContent = text;
-      msg.className = "message show " + kind;
-    }
-
-    async function api(path, options) {
-      const res = await fetch(API + path, options);
-      let data = {};
-      try { data = await res.json(); } catch (e) { /* empty body */ }
-      if (!res.ok) throw new Error(data.error || ("request failed with status " + res.status));
-      return data;
-    }
-
-    async function loadJob(jobId) {
-      const title = document.getElementById("job-title");
-      const meta = document.getElementById("job-meta");
-      if (!jobId) {
-        title.textContent = "No job selected";
-        meta.textContent = "Open the link the recruiter shared, or paste the job id below.";
-        return;
-      }
+    async function showJob(jobId) {
+      $("job-info").classList.add("hidden");
+      if (!jobId) return;
       try {
-        const data = await api("/candidates?jobId=" + encodeURIComponent(jobId));
-        title.textContent = data.job.title;
-        meta.textContent = "Required skills: " + data.job.requiredSkills.join(", ") +
-          " · Minimum experience: " + data.job.minYears + " year(s)";
+        const job = await RR.api("/jobs?jobId=" + encodeURIComponent(jobId));
+        $("job-title").textContent = job.title;
+        $("job-meta").textContent = "Minimum experience: " + job.minYears + " year(s)";
+        $("job-skills").replaceChildren(RR.chips(job.requiredSkills, "neutral"));
+        $("job-description").textContent = job.description || "";
+        $("job-info").classList.remove("hidden");
+        const url = new URL(location.href);
+        url.searchParams.set("jobId", jobId);
+        history.replaceState(null, "", url);
       } catch (e) {
-        title.textContent = "Job not found";
-        meta.textContent = e.message;
+        RR.show(msg, "Could not load the job: " + e.message, "error");
       }
     }
 
-    form.addEventListener("submit", async (event) => {
+    async function loadJobs() {
+      const wanted = RR.param("jobId");
+      try {
+        const data = await RR.api("/jobs");
+        select.replaceChildren(RR.el("option", { text: "— select a position —", attrs: { value: "" } }));
+        data.jobs.forEach((j) => select.appendChild(RR.el("option", { text: j.title, attrs: { value: j.jobId } })));
+        if (wanted && !data.jobs.some((j) => j.jobId === wanted)) {
+          select.appendChild(RR.el("option", { text: "Shared job", attrs: { value: wanted } }));
+        }
+        select.value = wanted;
+        showJob(wanted);
+      } catch (e) {
+        select.replaceChildren(RR.el("option", { text: "Could not load positions", attrs: { value: wanted } }));
+        if (wanted) showJob(wanted);
+      }
+    }
+
+    select.addEventListener("change", () => showJob(select.value));
+
+    const drop = $("drop");
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) $("file").files = e.dataTransfer.files; });
+
+    $("upload-form").addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!API) { show("config.js is missing the API URL.", "error"); return; }
+      const jobId = select.value;
+      const name = $("name").value.trim();
+      const email = $("email").value.trim();
+      const file = $("file").files[0];
 
-      const jobId = jobIdInput.value.trim();
-      const name = document.getElementById("name").value.trim();
-      const email = document.getElementById("email").value.trim();
-      const file = document.getElementById("file").files[0];
-
-      if (!jobId || !name || !email || !file) { show("Please fill in every field and choose a PDF.", "error"); return; }
+      if (!jobId) { RR.show(msg, "Please choose a position first.", "error"); return; }
+      if (!name || !email || !file) { RR.show(msg, "Please fill in every field and choose a PDF.", "error"); return; }
       if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-        show("Only PDF files are accepted.", "error"); return;
+        RR.show(msg, "Only PDF files are accepted.", "error"); return;
       }
-      if (file.size > MAX_BYTES) { show("The file is larger than 5 MB.", "error"); return; }
+      if (file.size > MAX_BYTES) { RR.show(msg, "The file is larger than 5 MB.", "error"); return; }
 
-      submitBtn.disabled = true;
+      $("submit").disabled = true;
+      $("tracking").classList.add("hidden");
       try {
-        show("Requesting a secure upload link…", "info");
-        const signed = await api("/upload-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId, name, email, contentType: "application/pdf", fileSize: file.size }),
-        });
-
-        show("Uploading " + file.name + "…", "info");
-        const put = await fetch(signed.uploadUrl, { method: "PUT", headers: signed.headers, body: file });
-        if (!put.ok) throw new Error("upload to storage failed with status " + put.status);
-
-        show("Uploaded. Your resume is being processed – reference " + signed.candidateId + ".", "ok");
-        form.reset();
-        jobIdInput.value = jobId;
+        RR.show(msg, "Uploading " + file.name + " securely…", "info");
+        const signed = await RR.uploadResume(jobId, file, name, email);
+        RR.show(msg, "Uploaded. Your resume is being scored – this usually takes a few seconds.", "ok");
+        $("reference").textContent = signed.candidateId;
+        $("track-link").href = "status.html?jobId=" + encodeURIComponent(jobId) +
+          "&candidateId=" + encodeURIComponent(signed.candidateId);
+        $("tracking").classList.remove("hidden");
+        $("upload-form").reset();
       } catch (e) {
-        show("Upload failed: " + e.message, "error");
+        RR.show(msg, "Upload failed: " + e.message, "error");
       } finally {
-        submitBtn.disabled = false;
+        $("submit").disabled = false;
       }
     });
 
-    const initialJob = new URLSearchParams(location.search).get("jobId") || "";
-    jobIdInput.value = initialJob;
-    jobIdInput.addEventListener("change", () => loadJob(jobIdInput.value.trim()));
-    loadJob(initialJob);
+    loadJobs();
   </script>
 </body>
 </html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResumeRank – Serverless Resume Screening</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Screen hundreds of resumes in seconds –<br>with zero servers.</h1>
+      <p>ResumeRank reads each PDF resume the moment it is uploaded, scores it 0–100 against the job's
+        requirements with a transparent formula, ranks every applicant on a live leaderboard and emails the
+        recruiter when a strong candidate arrives. It runs entirely on AWS serverless services and scales
+        from zero to a placement-week burst on its own.</p>
+      <a class="btn light" href="recruiter.html">Open recruiter dashboard</a>
+      <a class="btn secondary" href="#jobs">Browse open positions</a>
+      <div class="hero-stats">
+        <div><div class="value" id="stat-jobs">–</div><div class="label">jobs posted</div></div>
+        <div><div class="value" id="stat-resumes">–</div><div class="label">resumes processed</div></div>
+        <div><div class="value">≈ 5 s</div><div class="label">upload to score</div></div>
+        <div><div class="value">Rs. 0</div><div class="label">cloud bill (AWS Free Tier)</div></div>
+      </div>
+    </div>
+  </section>
+
+  <main>
+    <h2 class="section-title" id="jobs">Open positions</h2>
+    <div class="grid grid-3" id="job-cards">
+      <div class="card meta">Loading jobs…</div>
+    </div>
+
+    <h2 class="section-title">How it works</h2>
+    <div class="grid grid-3">
+      <div class="card"><div class="step-num">1</div><h3>Recruiter posts a job</h3>
+        <p class="meta">Paste the job description – the required skills are extracted automatically from a
+          153-skill dictionary with aliases (“JS”, “Amazon Web Services”, “k8s”).</p></div>
+      <div class="card"><div class="step-num">2</div><h3>Candidate uploads a PDF</h3>
+        <p class="meta">The browser gets a 5-minute pre-signed URL and uploads straight into a private S3
+          bucket. No AWS credentials ever reach the browser; only PDFs up to 5 MB are accepted.</p></div>
+      <div class="card"><div class="step-num">3</div><h3>The upload is queued</h3>
+        <p class="meta">S3 emits an event into an SQS queue. The queue absorbs bursts and Lambda drains it,
+          scaling out automatically; poison messages go to a dead-letter queue.</p></div>
+      <div class="card"><div class="step-num">4</div><h3>The resume is scored</h3>
+        <p class="meta">Text is extracted (Textract OCR where available, otherwise the PDF text layer), skills
+          and experience are found and the score is computed: skills 60 + experience 20 + education 20.</p></div>
+      <div class="card"><div class="step-num">5</div><h3>Ranked and alerted</h3>
+        <p class="meta">The result lands in DynamoDB, the leaderboard updates every 5 s and an SNS email is
+          sent for any score of 75 or more. Every run is logged and charted in CloudWatch.</p></div>
+      <div class="card"><div class="step-num">6</div><h3>A human decides</h3>
+        <p class="meta">The recruiter reviews the breakdown, opens the resume and shortlists or rejects. The
+          score orders the pile – it never rejects anyone automatically.</p></div>
+    </div>
+
+    <h2 class="section-title">Architecture</h2>
+    <div class="card">
+      <h3>Request path</h3>
+      <div class="flow">
+        <div class="node"><b>Browser</b>static pages</div><span class="arrow">→</span>
+        <div class="node"><b>S3</b>website hosting</div><span class="arrow">→</span>
+        <div class="node"><b>API Gateway</b>HTTP API · throttled</div><span class="arrow">→</span>
+        <div class="node"><b>Lambda</b>api_handler</div><span class="arrow">→</span>
+        <div class="node"><b>DynamoDB</b>Jobs · Candidates · ScoreIndex</div>
+      </div>
+      <h3 style="margin-top:18px">Event path</h3>
+      <div class="flow">
+        <div class="node"><b>S3</b>private resumes bucket</div><span class="arrow">→</span>
+        <div class="node"><b>SQS</b>resumerank-queue (+ DLQ)</div><span class="arrow">→</span>
+        <div class="node"><b>Lambda</b>process_resume</div><span class="arrow">→</span>
+        <div class="node"><b>Textract / Comprehend</b>text &amp; entities</div><span class="arrow">→</span>
+        <div class="node"><b>DynamoDB</b>score + breakdown</div><span class="arrow">→</span>
+        <div class="node"><b>SNS</b>recruiter email</div>
+      </div>
+      <p class="meta" style="margin-top:14px">Observed with CloudWatch Logs, a custom
+        <code>ResumeRank/CandidateScore</code> metric and a dashboard; secured with least-privilege IAM roles,
+        a private bucket, pre-signed URLs and a recruiter access key.</p>
+    </div>
+
+    <h2 class="section-title">Built to scale</h2>
+    <div class="grid grid-3">
+      <div class="card"><h3>Load balancing</h3><p class="meta">API Gateway is AWS's managed front door: it
+        spreads every request across a fleet AWS operates, with rate (20 req/s) and burst (50) throttling to
+        protect the backend.</p></div>
+      <div class="card"><h3>Auto scaling</h3><p class="meta">Lambda starts a new copy of the function for each
+        concurrent message – from 0 to the configured maximum – and back to 0 when idle. DynamoDB on-demand
+        scales reads and writes the same way.</p></div>
+      <div class="card"><h3>Queue-based load levelling</h3><p class="meta">A burst of uploads waits in SQS
+        instead of overwhelming the processor; failed messages are retried and then parked in a dead-letter
+        queue so nothing is lost.</p></div>
+    </div>
+  </main>
+
+  <footer>ResumeRank · course project · S3 · Lambda · API Gateway · SQS · DynamoDB · SNS · CloudWatch · IAM</footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    RR.nav("index.html");
+
+    (async () => {
+      const box = document.getElementById("job-cards");
+      try {
+        const data = await RR.api("/jobs");
+        document.getElementById("stat-jobs").textContent = data.count;
+        document.getElementById("stat-resumes").textContent = data.totalCandidates;
+        box.replaceChildren();
+        if (!data.jobs.length) {
+          box.appendChild(RR.el("div", { cls: "card meta", text: "No open positions yet." }));
+          return;
+        }
+        data.jobs.slice(0, 9).forEach((job) => {
+          box.appendChild(RR.el("div", { cls: "card" }, [
+            RR.el("h3", { text: job.title }),
+            RR.el("p", { cls: "meta", text: `Minimum experience: ${job.minYears} year(s) · ${job.candidateCount} applicant(s)` }),
+            RR.chips(job.requiredSkills, "neutral"),
+            RR.el("div", {}, [RR.el("a", { cls: "btn", text: "Apply", attrs: { href: "upload.html?jobId=" + encodeURIComponent(job.jobId) } })]),
+          ]));
+        });
+      } catch (e) {
+        box.replaceChildren(RR.el("div", { cls: "card meta", text: "Could not load jobs: " + e.message }));
+      }
+    })();
+  </script>
+</body>
+</html>
