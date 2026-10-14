@@ -2,19 +2,36 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "JobsAndCandidates",
+      "Sid": "JobsTable",
       "Effect": "Allow",
-      "Action": ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"],
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:Scan"
+      ],
+      "Resource": "arn:aws:dynamodb:ap-south-1:<ACCOUNT_ID>:table/Jobs"
+    },
+    {
+      "Sid": "CandidatesTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:UpdateItem"
+      ],
       "Resource": [
-        "arn:aws:dynamodb:ap-south-1:<ACCOUNT_ID>:table/Jobs",
         "arn:aws:dynamodb:ap-south-1:<ACCOUNT_ID>:table/Candidates",
         "arn:aws:dynamodb:ap-south-1:<ACCOUNT_ID>:table/Candidates/index/ScoreIndex"
       ]
     },
     {
-      "Sid": "SignResumeUploads",
+      "Sid": "SignResumeUploadsAndDownloads",
       "Effect": "Allow",
-      "Action": "s3:PutObject",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
       "Resource": "arn:aws:s3:::resumerank-resumes-<SUFFIX>/resumes/*"
     }
   ]

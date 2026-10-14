@@ -2,6 +2,16 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "ConsumeUploadQueue",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": "arn:aws:sqs:ap-south-1:<ACCOUNT_ID>:resumerank-queue"
+    },
+    {
       "Sid": "ReadResumes",
       "Effect": "Allow",
       "Action": "s3:GetObject",
@@ -10,19 +20,28 @@
     {
       "Sid": "TextractNoResourceLevelPermissions",
       "Effect": "Allow",
-      "Action": ["textract:StartDocumentTextDetection", "textract:GetDocumentTextDetection"],
+      "Action": [
+        "textract:StartDocumentTextDetection",
+        "textract:GetDocumentTextDetection"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "ComprehendNoResourceLevelPermissions",
       "Effect": "Allow",
-      "Action": ["comprehend:DetectKeyPhrases", "comprehend:DetectEntities"],
+      "Action": [
+        "comprehend:DetectKeyPhrases",
+        "comprehend:DetectEntities"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "JobsAndCandidates",
       "Effect": "Allow",
-      "Action": ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem"
+      ],
       "Resource": [
         "arn:aws:dynamodb:ap-south-1:<ACCOUNT_ID>:table/Jobs",
         "arn:aws:dynamodb:ap-south-1:<ACCOUNT_ID>:table/Candidates"
@@ -39,7 +58,11 @@
       "Effect": "Allow",
       "Action": "cloudwatch:PutMetricData",
       "Resource": "*",
-      "Condition": { "StringEquals": { "cloudwatch:namespace": "ResumeRank" } }
+      "Condition": {
+        "StringEquals": {
+          "cloudwatch:namespace": "ResumeRank"
+        }
+      }
     }
   ]
 }

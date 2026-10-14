@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowResumesBucketEvents",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "s3.amazonaws.com"
+      },
+      "Action": "sqs:SendMessage",
+      "Resource": "arn:aws:sqs:ap-south-1:<ACCOUNT_ID>:resumerank-queue",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "arn:aws:s3:::resumerank-resumes-<SUFFIX>"
+        },
+        "StringEquals": {
+          "aws:SourceAccount": "<ACCOUNT_ID>"
+        }
+      }
+    }
+  ]
+}
