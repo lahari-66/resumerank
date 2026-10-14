@@ -48,11 +48,11 @@ identical score and breakdown, confirming the pipeline is deterministic under co
 | Correctness | mean score 74.8 = mean of the expected scores of R1, R2, R4, R5, R6 |
 | Throttling | no 429 responses at 20 parallel clients (limit: 20/s, burst 50) |
 
-[[figure: screenshots/cloudwatch-dashboard.png | Figure 6 – CloudWatch dashboard during the load test: Lambda concurrency, SQS queue depth and API requests]]
+[[figure: screenshots/cloudwatch-dashboard.png | Figure 11 – CloudWatch dashboard during the load test: Lambda concurrency, SQS queue depth and API requests]]
 
-[[figure: screenshots/sns-email.png | Figure 7 – SNS alert email for a candidate scoring 100]]
+[[figure: screenshots/sns-email.png | Figure 12 – SNS alert email for a candidate scoring 100]]
 
-[[figure: screenshots/sqs-monitoring.png | Figure 8 – SQS queue monitoring: messages sent by S3 and deleted by Lambda]]
+[[figure: screenshots/sqs-monitoring.png | Figure 13 – SQS queue monitoring: messages sent by S3 and deleted by Lambda]]
 
 ## 11.4 Issues found and fixed during testing
 

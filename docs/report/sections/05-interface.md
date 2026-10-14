@@ -13,11 +13,21 @@ one helper script and a navigation bar.
 
 [[figure: screenshots/home.png | Figure 2 – Home page with live statistics and open positions]]
 
-[[figure: screenshots/recruiter-dashboard.png | Figure 3 – Recruiter dashboard: stat cards, score distribution, skill gaps and the ranked leaderboard]]
+[[figure: screenshots/home-how-it-works.png | Figure 3 – Home page: the six-step "How it works" explanation]]
 
-[[figure: screenshots/candidate-drawer.png | Figure 4 – Candidate panel with breakdown, extracted text, resume viewer and decision buttons]]
+[[figure: screenshots/apply.png | Figure 4 – Apply page: position picker, required skills and drag-and-drop PDF upload]]
 
 [[figure: screenshots/status.png | Figure 5 – Candidate's application status with score ring and skill feedback]]
+
+[[figure: screenshots/recruiter-login.png | Figure 6 – Recruiter sign-in with the access key]]
+
+[[figure: screenshots/new-job.png | Figure 7 – Posting a job: seven required skills extracted automatically from the description]]
+
+[[figure: screenshots/recruiter-dashboard.png | Figure 8 – Recruiter dashboard: job list, stat cards, score distribution and skill-gap charts]]
+
+[[figure: screenshots/leaderboard.png | Figure 9 – Ranked leaderboard filtered to scores of 75+ and searched by skill, with bulk upload and CSV export]]
+
+[[figure: screenshots/candidate-drawer.png | Figure 10 – Candidate panel with breakdown, extracted text, resume viewer and decision buttons]]
 
 ## 5.1 API used by the pages
 
