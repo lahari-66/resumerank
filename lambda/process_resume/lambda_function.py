@@ -63,6 +63,10 @@ class RetryableError(Exception):
     maxReceiveCount attempts it moves to the dead-letter queue instead of being lost."""
 
 
+class Superseded(Exception):
+    """The candidate applied again while this resume was queued; the old record must stay SUPERSEDED."""
+
+
 class TextractUnavailable(Exception):
     """The account cannot call Textract at all (e.g. AWS Free plan), as opposed to a failed job."""
 
@@ -265,12 +269,19 @@ def save_scored(job_id, candidate_id, key, result, text):
     }
     names = {f"#{k}": k for k in fields}
     values = {f":{k}": to_dynamo(v) for k, v in fields.items()}
-    candidates_table.update_item(
-        Key={"jobId": job_id, "candidateId": candidate_id},
-        UpdateExpression="SET " + ", ".join(f"#{k} = :{k}" for k in fields) + " REMOVE failureReason",
-        ExpressionAttributeNames=names,
-        ExpressionAttributeValues=values,
-    )
+    values[":superseded"] = "SUPERSEDED"
+    try:
+        candidates_table.update_item(
+            Key={"jobId": job_id, "candidateId": candidate_id},
+            UpdateExpression="SET " + ", ".join(f"#{k} = :{k}" for k in fields) + " REMOVE failureReason",
+            ConditionExpression="attribute_not_exists(#status) OR #status <> :superseded",
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+        )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise Superseded() from e
+        raise
 
 
 def save_failed(job_id, candidate_id, key, reason):
@@ -279,11 +290,18 @@ def save_failed(job_id, candidate_id, key, reason):
             Key={"jobId": job_id, "candidateId": candidate_id},
             UpdateExpression="SET #s = :s, failureReason = :r, s3Key = :k, processedAt = :p, "
                              "score = if_not_exists(score, :zero)",
+            ConditionExpression="attribute_not_exists(#s) OR #s <> :superseded",
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={
                 ":s": "FAILED", ":r": reason[:500], ":k": key, ":p": now_iso(), ":zero": 0,
+                ":superseded": "SUPERSEDED",
             },
         )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            logger.info("%s/%s was superseded; FAILED not written", job_id, candidate_id)
+        else:
+            logger.exception("could not write FAILED status for %s/%s", job_id, candidate_id)
     except Exception:
         logger.exception("could not write FAILED status for %s/%s", job_id, candidate_id)
 
@@ -298,6 +316,15 @@ def put_score_metric(score):
         logger.exception("put_metric_data failed")
 
 
+def alert_threshold(job):
+    """The job's own alertThreshold (50-100) when set, otherwise the SCORE_THRESHOLD default."""
+    try:
+        value = int(job.get("alertThreshold", SCORE_THRESHOLD))
+    except (TypeError, ValueError):
+        return SCORE_THRESHOLD
+    return value if 0 < value <= 100 else SCORE_THRESHOLD
+
+
 def notify(job, candidate, result):
     if not SNS_TOPIC_ARN:
         logger.warning("SNS_TOPIC_ARN not set; skipping alert")
@@ -306,7 +333,7 @@ def notify(job, candidate, result):
     title = job.get("title", job["jobId"])
     subject = f"ResumeRank: {name} scored {result['score']} for {title}"[:100]
     body = "\n".join([
-        f"A candidate crossed the {SCORE_THRESHOLD}-point threshold.",
+        f"A candidate crossed this job's {alert_threshold(job)}-point alert threshold.",
         "",
         f"Job:        {title} ({job['jobId']})",
         f"Candidate:  {name}",
@@ -349,6 +376,9 @@ def process_record(record, context, retryable=False):
             raise ProcessingError(f"dynamodb read failed: {e}") from e
         if not job:
             raise ProcessingError(f"job {job_id} not found")
+        if candidate.get("status") == "SUPERSEDED":
+            logger.info("%s was replaced by a newer application; skipping", candidate_id)
+            return {"key": key, "status": "SUPERSEDED"}
         candidate.setdefault("candidateId", candidate_id)
 
         text = get_text(bucket, key, context)
@@ -368,13 +398,16 @@ def process_record(record, context, retryable=False):
 
         try:
             save_scored(job_id, candidate_id, key, result, text)
+        except Superseded:
+            logger.info("%s was superseded while being scored; result discarded, no alert", candidate_id)
+            return {"key": key, "status": "SUPERSEDED"}
         except Exception as e:
             if retryable:
                 raise RetryableError(f"dynamodb update failed: {e}") from e
             raise ProcessingError(f"dynamodb update failed: {e}") from e
 
         put_score_metric(result["score"])
-        if result["score"] >= SCORE_THRESHOLD:
+        if result["score"] >= alert_threshold(job):
             notify(job, candidate, result)
         return {"key": key, "status": "SCORED", "score": result["score"]}
 

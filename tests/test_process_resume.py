@@ -14,6 +14,8 @@ import unittest
 from decimal import Decimal
 from unittest import mock
 
+from botocore.exceptions import ClientError
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.environ.update({
     "AWS_DEFAULT_REGION": "ap-south-1",
@@ -53,6 +55,12 @@ class FakeTable:
         self.items.append(Item)
 
     def update_item(self, **kwargs):
+        # honour the processor's only condition: never overwrite a SUPERSEDED record
+        cond = kwargs.get("ConditionExpression", "")
+        if "<> :superseded" in cond:
+            current = self.get_item(kwargs["Key"]).get("Item", {})
+            if current.get("status") == "SUPERSEDED":
+                raise ClientError({"Error": {"Code": "ConditionalCheckFailedException"}}, "UpdateItem")
         self.updates.append(kwargs)
 
     def query(self, **kwargs):
@@ -143,6 +151,45 @@ class ProcessResumeTests(unittest.TestCase):
         metric = self.cw.put_metric_data.call_args.kwargs
         self.assertEqual(metric["Namespace"], "ResumeRank")
         self.assertEqual(metric["MetricData"][0]["MetricName"], "CandidateScore")
+
+    def test_job_alert_threshold_overrides_default(self):
+        self.jobs.items[0]["alertThreshold"] = Decimal(80)
+        self.textract_returns(["Asha", "EXPERIENCE", "Engineer   Jul 2022 - Jun 2025", "Python, AWS, Docker, Linux"])
+        out = processor.lambda_handler(s3_event(), FakeContext())
+        self.assertEqual(out["results"][0]["score"], 78)        # skills 48 (4/5) + exp 20 + edu 10 (no degree)
+        self.sns.publish.assert_not_called()                    # 78 < 80 although it is above the default 75
+        self.jobs.items[0]["alertThreshold"] = Decimal(70)
+        self.textract_returns(["Asha", "EXPERIENCE", "Engineer   Jul 2022 - Jun 2025", "Python, AWS, Docker, Linux"])
+        processor.lambda_handler(s3_event(), FakeContext())
+        self.sns.publish.assert_called_once()
+        self.assertIn("70-point", self.sns.publish.call_args.kwargs["Message"])
+
+    def test_alert_threshold_falls_back_to_default(self):
+        self.assertEqual(processor.alert_threshold({}), processor.SCORE_THRESHOLD)
+        self.assertEqual(processor.alert_threshold({"alertThreshold": "bad"}), processor.SCORE_THRESHOLD)
+        self.assertEqual(processor.alert_threshold({"alertThreshold": Decimal(60)}), 60)
+
+    def test_superseded_before_processing_is_skipped(self):
+        self.cands.items[0]["status"] = "SUPERSEDED"
+        out = processor.lambda_handler(s3_event(), FakeContext())
+        self.assertEqual(out["results"][0]["status"], "SUPERSEDED")
+        self.textract.start_document_text_detection.assert_not_called()
+        self.assertEqual(self.cands.updates, [])
+
+    def test_superseded_while_scoring_keeps_status_and_sends_nothing(self):
+        self.textract_returns(STRONG_LINES)
+        original = self.textract.get_document_text_detection.side_effect
+
+        def supersede_mid_way(*args, **kwargs):     # the candidate re-applies while Textract runs
+            self.cands.items[0]["status"] = "SUPERSEDED"
+            return next(original)
+        self.textract.get_document_text_detection.side_effect = supersede_mid_way
+        out = processor.lambda_handler(s3_event(), FakeContext())
+        self.assertEqual(out["results"][0]["status"], "SUPERSEDED")
+        self.assertEqual(self.cands.items[0]["status"], "SUPERSEDED")
+        self.assertEqual(self.cands.updates, [])
+        self.sns.publish.assert_not_called()
+        self.cw.put_metric_data.assert_not_called()
 
     def test_low_score_does_not_alert(self):
         self.textract_returns(["Imran", "Python developer"], split=1)
