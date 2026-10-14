@@ -48,5 +48,5 @@ pre-signed URL, then PUT to S3. With 40 uploads, 20 in parallel, against the dep
 | Per resume, upload → scored | median 4 s, p95 5 s, max 6 s |
 | Correctness under load | every copy of each test resume got exactly its expected score |
 
-The CloudWatch dashboard (Figure 6) shows the corresponding rise in concurrent executions, the
+The CloudWatch dashboard (Figure 11) shows the corresponding rise in concurrent executions, the
 queue depth spiking and draining, and the API request count.
