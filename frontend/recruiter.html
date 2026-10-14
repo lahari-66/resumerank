@@ -54,6 +54,18 @@
                 <input type="number" id="min-years" min="0" max="15" value="0" required>
               </div>
             </div>
+            <div class="row">
+              <div>
+                <label for="deadline">Application deadline (optional)</label>
+                <input type="date" id="deadline">
+                <p class="hint">Applications close at the end of this day (IST).</p>
+              </div>
+              <div>
+                <label for="alert-threshold">Email me when a score reaches</label>
+                <input type="number" id="alert-threshold" min="50" max="100" value="75" required>
+                <p class="hint">50–100. Default 75.</p>
+              </div>
+            </div>
             <label for="description">Job description (optional)</label>
             <textarea id="description" maxlength="5000" placeholder="Paste the full job description – ResumeRank can pick the required skills out of it."></textarea>
             <button type="button" class="secondary" id="extract">Extract skills from description</button>
@@ -74,6 +86,12 @@
                 <h2 id="jv-title" style="margin-bottom:4px"></h2>
                 <p class="meta" id="jv-meta" style="margin:0 0 6px"></p>
                 <div id="jv-skills"></div>
+                <div class="toolbar" style="margin:10px 0 0">
+                  <span class="job-state" id="jv-state"></span>
+                  <button class="small secondary" id="toggle-job">Close applications</button>
+                  <button class="small" id="send-shortlist">Email shortlist</button>
+                </div>
+                <div class="message" id="jv-message"></div>
               </div>
               <div class="share-box">
                 <canvas id="qr" width="132" height="132" aria-label="QR code of the application link"></canvas>
@@ -122,7 +140,8 @@
                 <option value="FAILED">Failed</option>
                 <option value="SHORTLISTED">Shortlisted</option>
                 <option value="REJECTED">Rejected</option>
-                <option value="strong">Score 75+</option>
+                <option value="strong">Above alert threshold</option>
+                <option value="SUPERSEDED">Replaced applications</option>
               </select>
               <button class="secondary" id="export">Export CSV</button>
               <label class="switch" title="Names and emails stay hidden until a candidate is shortlisted">
@@ -192,6 +211,12 @@
     <h3 style="margin-top:12px">Missing skills</h3><div id="d-missing"></div>
     <div id="d-failure" class="message error"></div>
     <h3 style="margin-top:16px">Extracted text (preview)</h3><pre id="d-preview"></pre>
+    <h3 style="margin-top:16px">Recruiter note</h3>
+    <textarea id="d-note" maxlength="500" placeholder="Private note – only recruiters see it (500 characters)" style="min-height:80px"></textarea>
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <span class="meta" id="d-note-count">0 / 500</span>
+      <button class="small secondary" id="d-note-save" style="margin-top:6px">Save note</button>
+    </div>
     <div class="toolbar">
       <button id="d-view">View resume PDF</button>
       <button class="ok" id="d-short">Shortlist</button>
@@ -217,7 +242,7 @@
     // ------------------------------------------------------------ anonymised screening
     function anonymised() { return $("anon").checked; }
     function masked(c) { return anonymised() && c.decision !== "SHORTLISTED"; }
-    function displayName(c) { return masked(c) ? "Candidate #" + c.rank : (c.name || "(no name)"); }
+    function displayName(c) { return masked(c) ? "Candidate #" + (c.rank ?? "–") : (c.name || "(no name)"); }
     function displayEmail(c) { return masked(c) ? "" : (c.email || ""); }
     $("anon").addEventListener("change", () => {
       try { sessionStorage.setItem(ANON_STORE, anonymised() ? "1" : "0"); } catch (e) { /* ignore */ }
@@ -270,20 +295,27 @@
 
     // ------------------------------------------------------------ jobs sidebar
     async function loadJobs() {
-      const data = await RR.api("/jobs");
+      const data = await guarded(() => RR.api("/jobs", { recruiter: true }));   // recruiter key: every job, open or not
       state.jobs = data.jobs;
       const list = $("job-list");
       list.replaceChildren();
       if (!data.jobs.length) list.appendChild(RR.el("li", { cls: "meta", text: "No jobs yet." }));
       data.jobs.forEach((j) => {
-        list.appendChild(RR.el("li", { cls: j.jobId === state.jobId ? "active" : "", on: { click: () => selectJob(j.jobId) } }, [
+        const cls = [j.jobId === state.jobId ? "active" : "", j.acceptingApplications === false ? "closed" : ""].join(" ").trim();
+        list.appendChild(RR.el("li", { cls, on: { click: () => selectJob(j.jobId) } }, [
           RR.el("div", { cls: "title", text: j.title }),
-          RR.el("div", { cls: "meta", text: `${j.candidateCount} applicant(s) · ${RR.when(j.createdAt).split(",")[0]}` }),
+          RR.el("div", { cls: "meta", text: `${jobStateLabel(j)} · ${j.candidateCount} applicant(s) · ${RR.when(j.createdAt).split(",")[0]}` }),
         ]));
       });
     }
 
     $("insights-btn").addEventListener("click", () => showInsights());
+
+    function jobStateLabel(j) {
+      if (j.status === "CLOSED") return "Closed";
+      if (j.acceptingApplications === false) return "Deadline passed";
+      return j.deadline ? `Open until ${j.deadline}` : "Open";
+    }
 
     function showPanel(which) {
       ["job-form-card", "job-view", "empty-view"].forEach((id) => $(id).classList.toggle("hidden", id !== which));
@@ -317,6 +349,7 @@
       state.skills = [];
       renderSkillChips();
       $("job-form").reset();
+      $("deadline").min = new Date().toISOString().slice(0, 10);
       RR.hide($("job-message"));
       showPanel("job-form-card");
       loadJobs();
@@ -340,7 +373,13 @@
         minYears: parseInt($("min-years").value, 10) || 0,
         requiredSkills: state.skills,
         description: $("description").value.trim(),
+        alertThreshold: parseInt($("alert-threshold").value, 10) || 75,
       };
+      if ($("deadline").value) body.deadline = $("deadline").value;
+      if (body.alertThreshold < 50 || body.alertThreshold > 100) {
+        RR.show($("job-message"), "The alert threshold must be between 50 and 100.", "error");
+        return;
+      }
       if (!body.title || !body.recruiterEmail || !body.requiredSkills.length) {
         RR.show($("job-message"), "Title, recruiter email and at least one skill are required.", "error");
         return;
@@ -430,14 +469,19 @@
     function renderJob(data) {
       const job = data.job;
       $("jv-title").textContent = job.title;
-      $("jv-meta").textContent = `Minimum ${job.minYears} year(s) · created ${RR.when(job.createdAt)}`;
+      $("jv-meta").textContent = `Minimum ${job.minYears} year(s) · alert at ${job.alertThreshold ?? 75}+ · created ${RR.when(job.createdAt)}`;
       $("jv-skills").replaceChildren(RR.chips(job.requiredSkills, "neutral"));
+      $("jv-state").textContent = jobStateLabel(job);
+      $("jv-state").className = "job-state " + (job.acceptingApplications === false ? "closed" : "open");
+      $("toggle-job").textContent = job.status === "CLOSED" ? "Reopen applications" : "Close applications";
 
-      const cs = data.candidates;
+      const cs = data.candidates.filter((c) => c.status !== "SUPERSEDED");   // replaced applications do not count
       const scored = cs.filter((c) => c.status === "SCORED");
+      const threshold = job.alertThreshold ?? 75;
       $("s-total").textContent = cs.length;
       $("s-avg").textContent = scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length) : "–";
-      $("s-strong").textContent = scored.filter((c) => c.score >= 75).length;
+      $("s-strong").textContent = scored.filter((c) => c.score >= threshold).length;
+      $("s-strong").nextElementSibling.textContent = `Score ${threshold}+ (alerted)`;
       $("s-short").textContent = cs.filter((c) => c.decision === "SHORTLISTED").length;
       $("s-pending").textContent = cs.filter((c) => c.status === "PENDING").length;
       $("s-failed").textContent = cs.filter((c) => c.status === "FAILED").length;
@@ -475,7 +519,9 @@
       const q = $("search").value.trim().toLowerCase();
       const f = $("filter").value;
       return state.data.candidates.filter((c) => {
-        if (f === "strong" && !(c.status === "SCORED" && c.score >= 75)) return false;
+        if (f === "SUPERSEDED") { if (c.status !== "SUPERSEDED") return false; }
+        else if (c.status === "SUPERSEDED") return false;          // hidden unless that filter is chosen
+        if (f === "strong" && !(c.status === "SCORED" && c.score >= (state.data.job.alertThreshold ?? 75))) return false;
         if (["SCORED", "PENDING", "FAILED"].includes(f) && c.status !== f) return false;
         if (["SHORTLISTED", "REJECTED"].includes(f) && c.decision !== f) return false;
         if (!q) return true;
@@ -563,7 +609,7 @@
       const rows = filtered();
       if (!rows.length) return;
       const cols = ["rank", "name", "email", "status", "score", "skillScore", "expScore", "eduScore",
-                    "yearsExperience", "matchedSkills", "missingSkills", "decision", "processedAt", "failureReason"];
+                    "yearsExperience", "matchedSkills", "missingSkills", "decision", "note", "processedAt", "failureReason"];
       const cell = (v) => {
         const s = Array.isArray(v) ? v.join("; ") : (v ?? "");
         return /[",\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
@@ -626,6 +672,10 @@
       $("d-matched").replaceChildren(RR.chips(c.matchedSkills, "match"));
       $("d-missing").replaceChildren(RR.chips(c.missingSkills, "miss"));
       if (c.failureReason) RR.show($("d-failure"), c.failureReason, "error"); else RR.hide($("d-failure"));
+      if (document.activeElement !== $("d-note")) {
+        $("d-note").value = c.note || "";
+        $("d-note-count").textContent = $("d-note").value.length + " / 500";
+      }
       $("d-preview").textContent = masked(c) ? "(hidden while names are hidden – the extracted text starts with the candidate's name and contact details)"
         : (c.textPreview || "(no text extracted yet)");
     }
@@ -663,6 +713,35 @@
         refresh();
       } catch (e) { RR.show($("d-message"), "Could not save decision: " + e.message, "error"); }
     }
+    $("d-note").addEventListener("input", () => { $("d-note-count").textContent = $("d-note").value.length + " / 500"; });
+    $("d-note-save").addEventListener("click", async () => {
+      try {
+        await guarded(() => RR.api("/decision", { method: "POST", recruiter: true,
+          body: { jobId: state.jobId, candidateId: state.drawer, note: $("d-note").value } }));
+        RR.show($("d-message"), $("d-note").value.trim() ? "Note saved." : "Note removed.", "ok");
+        refresh();
+      } catch (e) { RR.show($("d-message"), "Could not save note: " + e.message, "error"); }
+    });
+
+    $("toggle-job").addEventListener("click", async () => {
+      if (!state.data) return;
+      const next = state.data.job.status === "CLOSED" ? "OPEN" : "CLOSED";
+      try {
+        await guarded(() => RR.api("/jobs/status", { method: "POST", recruiter: true, body: { jobId: state.jobId, status: next } }));
+        RR.show($("jv-message"), next === "CLOSED" ? "Applications closed – the job no longer appears on the public site." : "Applications reopened.", "ok");
+        await loadJobs();
+        refresh();
+      } catch (e) { RR.show($("jv-message"), "Could not change the job: " + e.message, "error"); }
+    });
+    $("send-shortlist").addEventListener("click", async () => {
+      $("send-shortlist").disabled = true;
+      try {
+        const out = await guarded(() => RR.api("/shortlist/send", { method: "POST", recruiter: true, body: { jobId: state.jobId } }));
+        RR.show($("jv-message"), `Shortlist of ${out.sent} candidate(s) emailed to the alert subscribers.`, "ok");
+      } catch (e) { RR.show($("jv-message"), "Could not send the shortlist: " + e.message, "error"); }
+      finally { $("send-shortlist").disabled = false; }
+    });
+
     $("d-short").addEventListener("click", () => decide("SHORTLISTED"));
     $("d-reject").addEventListener("click", () => decide("REJECTED"));
     $("d-clear").addEventListener("click", () => decide("NONE"));
@@ -697,7 +776,7 @@
       let scoredCount = 0, total = 0, strong = 0;
       loaded.forEach((d) => {
         (d.job.requiredSkills || []).forEach((s) => { required[s] = (required[s] || 0) + 1; });
-        d.candidates.filter((c) => c.status === "SCORED").forEach((c) => {
+        d.candidates.filter((c) => c.status === "SCORED").forEach((c) => {   // SUPERSEDED rows are excluded
           scoredCount += 1;
           total += c.score;
           if (c.score >= 75) strong += 1;

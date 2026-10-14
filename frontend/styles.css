@@ -194,6 +194,10 @@ tbody tr:hover { background: var(--hover-bg); }
 .status.PENDING { color: var(--mid); }
 .status.SCORED { color: var(--high); }
 .status.FAILED { color: var(--low); }
+.status.SUPERSEDED { color: var(--muted); text-decoration: line-through; }
+.job-state { font-size: 0.78rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
+.job-state.open { background: var(--high-bg); color: var(--high); }
+.job-state.closed { background: var(--grey-bg); color: var(--muted); }
 .decision { font-size: 0.75rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
 .decision.SHORTLISTED { background: var(--high-bg); color: var(--high); }
 .decision.REJECTED { background: var(--grey-bg); color: var(--muted); }

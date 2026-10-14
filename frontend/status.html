@@ -38,7 +38,7 @@
 
       <div id="r-failed" class="hidden">
         <div class="message error show" id="r-reason"></div>
-        <p class="meta">Tip: export your resume to PDF directly from Word, Google Docs or LaTeX so it contains
+        <p class="meta" id="r-tip">Tip: export your resume to PDF directly from Word, Google Docs or LaTeX so it contains
           selectable text, then upload it again.</p>
       </div>
 
@@ -87,10 +87,21 @@
       ["r-pending", "r-failed", "r-scored"].forEach((id) => $(id).classList.add("hidden"));
 
       if (d.status === "PENDING") { $("r-pending").classList.remove("hidden"); return; }
+      if (d.status === "SUPERSEDED") {
+        clearInterval(timer);
+        $("r-failed").classList.remove("hidden");
+        $("r-reason").textContent = "You applied to this job again, so this earlier application was replaced. " +
+          "Track the newer one with the reference from your latest upload.";
+        $("r-reason").className = "message info show";
+        $("r-tip").classList.add("hidden");
+        return;
+      }
       clearInterval(timer);
       if (d.status === "FAILED") {
         $("r-failed").classList.remove("hidden");
         $("r-reason").textContent = "We could not read this resume: " + (d.failureReason || "unknown error");
+        $("r-reason").className = "message error show";
+        $("r-tip").classList.remove("hidden");
         return;
       }
       $("r-scored").classList.remove("hidden");

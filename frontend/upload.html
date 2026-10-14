@@ -74,6 +74,15 @@
         $("job-skills").replaceChildren(RR.chips(job.requiredSkills, "neutral"));
         $("job-description").textContent = job.description || "";
         $("job-info").classList.remove("hidden");
+        const closed = job.acceptingApplications === false;
+        $("submit").disabled = closed;
+        if (closed) {
+          RR.show(msg, job.status === "CLOSED" ? "Applications for this job are closed."
+            : `The application deadline (${job.deadline}) has passed.`, "error");
+        } else {
+          RR.hide(msg);
+          if (job.deadline) $("job-meta").textContent += " · apply by " + job.deadline;
+        }
         const url = new URL(location.href);
         url.searchParams.set("jobId", jobId);
         history.replaceState(null, "", url);
