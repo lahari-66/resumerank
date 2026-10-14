@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESUMES = ["R1", "R2", "R4", "R5", "R6"]          # text PDFs (R3 needs OCR)
+RESUMES = ["R1", "R2", "R4", "R5", "R6", "R7", "R8"]   # text PDFs (R3 needs OCR)
 
 
 def load_env():

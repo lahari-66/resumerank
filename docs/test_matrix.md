@@ -1,11 +1,13 @@
-# Test matrix – six test resumes
+# Test matrix – eight test resumes
 
-All six resumes are team-authored with fictional names, employers and contact details.
+All eight resumes are team-authored and fictional (names, employers, universities, `example.com`
+emails, `+91 90000 0000x` phone numbers, placeholder GitHub links). They follow the structure of
+real student and early-career CVs: header with degree and contact row, Education with CGPA,
+Technical Skills grouped by category, Experience, Projects (title | stack, link, bullets with
+numbers), Achievements and Positions of Responsibility, and Certifications.
 Regenerate them with `python scripts/make_test_resumes.py` (PDF + matching `.txt`).
 
 ## Test job
-
-Post this job on the recruiter page (or run `tests/api/smoke_test.sh`, which creates it):
 
 | Field | Value |
 | --- | --- |
@@ -16,33 +18,35 @@ Post this job on the recruiter page (or run `tests/api/smoke_test.sh`, which cre
 
 ## Expected vs actual
 
-"Expected (formula)" is computed from each resume's source text with the section 12 formula.
-`python -m unittest tests.test_scoring` checks every row against its band locally.
-Fill in "Actual" from the leaderboard after the Day 2 Hr 1 run.
+"Expected" is the section 12 formula applied to each resume's text;
+`python -m unittest tests.test_scoring` asserts every value, every band and that the PDF text
+layer scores the same as the `.txt` source. Fill in **Actual** from the leaderboard after uploading
+all eight to one job.
 
-| # | File | Design | Purpose | Blueprint band | Skills /60 | Exp /20 | Edu /20 | Expected (formula) | Alert? | Actual | Pass? |
+| # | Profile | Design | Purpose | Band | Skills /60 | Exp /20 | Edu /20 | Expected | Alert? | Actual | Pass? |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| R1 | `R1.pdf` | all 5 skills, 3 yrs, B.Tech, text PDF | upper bound; SNS must fire | 90–100 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | 100, alert sent (console upload, 13 Oct) | ✅ |
-| R2 | `R2.pdf` | all skills as aliases (Python3, Amazon Web Services, docker-compose, Ubuntu/RHEL, PL/SQL), 2 yrs, diploma | alias dictionary | 85–95 | 60 (5/5) | 20 (2.0 yrs) | 10 | **90** | yes | 90 (8 of 8 load-test runs) | ✅ |
-| R3 | `R3.pdf` | same profile as R1, **image-only PDF** (no text layer) | OCR path | 85–100 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | FAILED – no text layer (Textract unavailable on Free plan) | expected on this account |
-| R4 | `R4.pdf` | 2 of 5 skills (python, sql), 1 yr, no degree | mid band; no alert | 40–55 | 24 (2/5) | 10 (1.0 yr) | 10 | **44** | no | 44, no alert (browser upload + 8 load-test runs) | ✅ |
-| R5 | `R5.pdf` | no required skills, 5 yrs, M.Tech | skill weight dominates | 30–40 | 0 (0/5) | 20 (5.0 yrs) | 20 | **40** | no | 40 (8 of 8 load-test runs) | ✅ |
-| R6 | `R6.pdf` | 2 pages, skills only on page 2, 3 yrs, B.Tech | multi-page Textract | R1 ± 5 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | 100, 2 pages read, alert sent (13 Oct) | ✅ |
+| R1 | Ananya Rao – cloud engineer | all 5 skills explicit, 3 yrs, B.Tech, text PDF | upper bound | 90–100 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | | |
+| R2 | Rohit Varma – developer | skills only as aliases (Python3, Amazon Web Services, docker-compose, Ubuntu / RHEL, PL/SQL), 2 yrs, diploma | alias dictionary | 85–95 | 60 (5/5) | 20 (2.0 yrs) | 10 | **90** | yes | | |
+| R3 | Kavya Menon – cloud engineer | like R1, **image-only PDF** | OCR path | 85–100 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** with Textract; **FAILED – no text layer** on this Free-plan account | yes / no | | |
+| R4 | Imran Shaik – data analyst | 2 of 5 skills (python, sql), 1 yr, Class XII only | mid band, no alert | 40–55 | 24 (2/5) | 10 (1.0 yr) | 10 | **44** | no | | |
+| R5 | Sneha Kulkarni – applied ML (R / MATLAB) | none of the 5 skills, 5 yrs, M.Tech | skill weight dominates | 30–40 | 0 (0/5) | 20 (5.0 yrs) | 20 | **40** | no | | |
+| R6 | Arjun Reddy – cloud engineer | 2 pages, all skills only on page 2, 3 yrs, B.Tech | multi-page extraction | R1 ± 5 | 60 (5/5) | 20 (3.0 yrs) | 20 | **100** | yes | | |
+| R7 | Priya Nair – fresher web developer | Next.js / TypeScript / Express / MongoDB; AWS only inside a project bullet; no work experience, dated projects and a club role (Aug 2024 – Present) | fresher; club role is not work | 25–40 | 12 (1/5: aws) | 0 (0 yrs) | 20 | **32** (52 if minYears = 0) | no | | |
+| R8 | Karthik Iyer – software engineer | "AWS (Lambda, API Gateway, DynamoDB, S3, Cognito)", Docker, pytest / GitHub Actions, 12-month internship, dated hackathon wins | skills in parentheses; internship years | 70–85 | 48 (4/5, no linux) | 10 (1.0 yr) | 20 | **78** | yes | | |
 
 Notes:
 
-- "Half the skills" for R4 is 2 of 5 so the formula lands inside the 40–55 band
-  (3 of 5 would give 56).
-- R2 has no degree keyword on purpose (a diploma is not in the section 12 degree list), which
-  is what puts it at 90 rather than 100.
-- Education-section dates (e.g. "B.Tech 2018 - 2022") are excluded from experience so a
-  degree is not counted as work experience.
-- **This account is on the AWS Free plan, where Textract is not available.** The processor falls
-  back to the PDF text layer, so R3 (image-only) is expected to end as **FAILED – "no text layer
-  in the PDF (scanned image)"**. That run demonstrates the failure path (T1.6); the OCR band
-  above applies only on an account with Textract access.
-- R3's actual score depends on OCR quality; a lower score with a readable text preview is
-  a documented limitation, not a pipeline failure.
+- **Experience counts only work sections** (Experience, Internships, Employment, …) and unlabelled
+  text such as the summary. Education dates never count, and dates under Projects, Achievements /
+  Positions of Responsibility, Hackathons or Certifications are not work years. That is why R7's
+  club role "Aug 2024 – Present" gives 0 years – but those dated activities still earn the
+  **fresher credit** (full 20) when a job's minimum experience is 0.
+- R2 has no degree keyword on purpose (a diploma is not in the section 12 degree list).
+- R3 has no text layer. On an account with Textract it is OCR'd and scores like R1; on this AWS
+  Free-plan account it ends as FAILED with a clear reason, which demonstrates the failure path.
+- R5 is a genuine ML profile written around R / MATLAB, so none of the five required skills appear.
+- R8 scores 78 – above the 75 alert threshold with one skill missing and one year of experience
+  against a two-year minimum.
 
 ## Extra checks (cross-verification, Day 2 Hr 4)
 
@@ -58,7 +62,7 @@ Notes:
 
 ## Load test (scaling evidence)
 
-`python scripts/load_test.py 40 20` – 40 uploads of R1/R2/R4/R5/R6 through the real API
+`python scripts/load_test.py 40 20` – 40 uploads of R1/R2/R4/R5/R6 (the earlier test set) through the real API
 (pre-signed URL + S3 PUT), 20 in parallel, against the deployed stack (14 Oct 2026):
 
 | Measure | Result |
