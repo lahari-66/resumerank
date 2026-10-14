@@ -19,6 +19,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FUNCTIONS = ("process_resume", "api_handler")
 INCLUDE = (".py", ".json")
 SKIP_DIRS = {"__pycache__", "bin"}
+# files another function also needs: api_handler uses the skill dictionary for POST /skills/extract
+SHARED = {"api_handler": ["lambda/process_resume/scoring.py", "lambda/process_resume/skills.json"]}
 
 
 def _add_tree(zf, src, keep):
@@ -46,6 +48,9 @@ def package(name):
 
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
         files = _add_tree(zf, src, lambda fn: fn.endswith(INCLUDE))
+        for rel in SHARED.get(name, []):
+            zf.write(os.path.join(ROOT, rel), os.path.basename(rel))
+            files.append(os.path.basename(rel))
         deps = []
         req = os.path.join(src, "requirements.txt")
         if os.path.exists(req):

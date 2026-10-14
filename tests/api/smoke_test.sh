@@ -12,6 +12,7 @@ cd "$(dirname "$0")/../.."
 API="${API_BASE_URL:?set API_BASE_URL in .env (API Gateway invoke URL)}"
 API="${API%/}"
 PDF="${1:-tests/resumes/R1.pdf}"
+RK=(-H "x-recruiter-key: ${RECRUITER_KEY:-}")   # recruiter-only routes
 PY=""
 for c in python3 python py; do   # skip the Windows Store "python3" stub, which exits non-zero
   if command -v "$c" >/dev/null && "$c" -c "pass" 2>/dev/null; then PY="$c"; break; fi
@@ -21,7 +22,7 @@ done
 json() { "$PY" -c "import json,sys; print(json.load(sys.stdin)$1)"; }
 
 echo "== POST /jobs"
-JOB=$(curl -sS -f -X POST "$API/jobs" -H "Content-Type: application/json" \
+JOB=$(curl -sS -f -X POST "$API/jobs" "${RK[@]}" -H "Content-Type: application/json" \
   -d '{"title":"Cloud Engineer Intern","requiredSkills":["python","aws","docker","linux","sql"],"minYears":2,"recruiterEmail":"recruiter@example.com"}')
 echo "$JOB"
 JOB_ID=$(echo "$JOB" | json '["jobId"]')
@@ -44,7 +45,7 @@ curl -sS -o /dev/null -w "6 MB    -> HTTP %{http_code}\n" -X POST "$API/upload-u
 
 echo "== GET /candidates (polling up to 60 s for SCORED)"
 for i in $(seq 1 20); do
-  OUT=$(curl -sS -f "$API/candidates?jobId=$JOB_ID")
+  OUT=$(curl -sS -f "${RK[@]}" "$API/candidates?jobId=$JOB_ID")
   STATUS=$(echo "$OUT" | json '["candidates"][0]["status"]')
   echo "  try $i: $STATUS"
   [ "$STATUS" != "PENDING" ] && break
@@ -59,4 +60,6 @@ if [ -n "${SITE_BUCKET:-}" ]; then
     -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type" \
     | grep -i "^access-control" || echo "  no CORS headers returned"
 fi
+echo "== recruiter routes without the key (expect 401)"
+curl -sS -o /dev/null -w "GET /candidates -> HTTP %{http_code}\n" "$API/candidates?jobId=$JOB_ID"
 echo "jobId=$JOB_ID"
