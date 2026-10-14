@@ -7,9 +7,11 @@ Public (candidates and the home page):
     POST /skills/extract    required skills found in a pasted job description
 
 Recruiter (header x-recruiter-key must match the RECRUITER_KEY environment variable):
-    POST /jobs              create a job
+    POST /jobs              create a job (optional deadline, alert threshold)
+    POST /jobs/status       close or reopen a job
+    POST /shortlist/send    email the shortlist through the SNS topic
     GET  /candidates        ranked candidates for ?jobId= (ScoreIndex, descending)
-    POST /decision          shortlist / reject / clear a candidate
+    POST /decision          shortlist / reject / clear a candidate, with an optional note
     GET  /resume-url        short-lived pre-signed GET URL to view a resume PDF
 
 Handler: lambda_function.lambda_handler (Python 3.12, 256 MB, 10 s). Contract: INTERFACES.md.
@@ -22,11 +24,11 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
@@ -42,6 +44,9 @@ UPLOAD_URL_TTL = int(os.environ.get("UPLOAD_URL_TTL", "300"))
 VIEW_URL_TTL = int(os.environ.get("VIEW_URL_TTL", "300"))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
+SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN", "")
+# deadlines are calendar dates; a job accepts applications until the end of that day in this zone (IST)
+DEADLINE_TZ = timezone(timedelta(minutes=int(os.environ.get("DEADLINE_UTC_OFFSET_MINUTES", "330"))))
 
 PDF_TYPE = "application/pdf"
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -50,6 +55,9 @@ MAX_TEXT = 200
 MAX_DESCRIPTION = 5000
 MAX_EXTRACT_TEXT = 20000
 DECISIONS = {"SHORTLISTED", "REJECTED", "NONE"}
+JOB_STATUSES = {"OPEN", "CLOSED"}
+MAX_NOTE = 500
+DEFAULT_ALERT_THRESHOLD = 75
 
 dynamodb = boto3.resource("dynamodb")
 # SigV4 + regional virtual-hosted endpoint so the browser talks straight to the bucket's region
@@ -59,6 +67,7 @@ s3 = boto3.client(
     endpoint_url=f"https://s3.{REGION}.amazonaws.com",
     config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
 )
+sns = boto3.client("sns")
 jobs_table = dynamodb.Table(JOBS_TABLE)
 candidates_table = dynamodb.Table(CANDIDATES_TABLE)
 
@@ -134,6 +143,13 @@ def id_field(value, name):
     return value.strip().lower()
 
 
+def is_recruiter(event):
+    if not RECRUITER_KEY:
+        return True
+    headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
+    return hmac.compare_digest(headers.get("x-recruiter-key", "").encode(), RECRUITER_KEY.encode())
+
+
 def require_recruiter(event):
     if not RECRUITER_KEY:
         return
@@ -157,6 +173,28 @@ def get_candidate(job_id, candidate_id):
     return item
 
 
+def today_local():
+    return datetime.now(DEADLINE_TZ).date()
+
+
+def job_status(job):
+    return job.get("status") or "OPEN"
+
+
+def closed_reason(job):
+    """None when the job accepts applications, otherwise the message shown to the candidate."""
+    if job_status(job) == "CLOSED":
+        return "applications for this job are closed"
+    deadline = job.get("deadline")
+    if deadline:
+        try:
+            if date.fromisoformat(deadline) < today_local():
+                return f"the application deadline for this job ({deadline}) has passed"
+        except ValueError:
+            pass
+    return None
+
+
 def public_job(job):
     return {
         "jobId": job["jobId"],
@@ -165,6 +203,10 @@ def public_job(job):
         "minYears": job.get("minYears", 0),
         "description": job.get("description", ""),
         "createdAt": job.get("createdAt"),
+        "status": job_status(job),
+        "deadline": job.get("deadline"),
+        "alertThreshold": job.get("alertThreshold", DEFAULT_ALERT_THRESHOLD),
+        "acceptingApplications": closed_reason(job) is None,
     }
 
 
@@ -192,6 +234,8 @@ def list_jobs(event):
         if "LastEvaluatedKey" not in page:
             break
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+    if not is_recruiter(event):   # candidates and the home page see only jobs accepting applications
+        jobs = [j for j in jobs if closed_reason(j) is None]
     jobs.sort(key=lambda j: j.get("createdAt", ""), reverse=True)
     jobs = jobs[:50]
 
@@ -221,7 +265,10 @@ def create_upload_url(event):
     if size > MAX_UPLOAD_BYTES:
         raise BadRequest(f"file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
 
-    get_job(job_id)
+    job = get_job(job_id)
+    reason = closed_reason(job)
+    if reason:
+        raise BadRequest(reason)
 
     candidate_id = str(uuid.uuid4())
     key = f"resumes/{job_id}/{candidate_id}.pdf"
@@ -235,8 +282,9 @@ def create_upload_url(event):
         "createdAt": now_iso(),
     }
     if email:
-        item["email"] = email
+        item["email"] = email.lower()
     candidates_table.put_item(Item=item)
+    superseded = supersede_earlier(job_id, email, candidate_id) if email else []
 
     # ContentType and ContentLength are signed, so S3 rejects any other type or size
     url = s3.generate_presigned_url(
@@ -245,14 +293,49 @@ def create_upload_url(event):
         ExpiresIn=UPLOAD_URL_TTL,
         HttpMethod="PUT",
     )
-    logger.info("upload url issued: %s (%d bytes)", key, size)
+    logger.info("upload url issued: %s (%d bytes)%s", key, size,
+                f", supersedes {', '.join(superseded)}" if superseded else "")
     return respond(200, {
         "candidateId": candidate_id,
+        "supersedes": superseded,
         "s3Key": key,
         "uploadUrl": url,
         "expiresIn": UPLOAD_URL_TTL,
         "headers": {"Content-Type": PDF_TYPE},
     })
+
+
+def supersede_earlier(job_id, email, new_candidate_id):
+    """Mark the same email's earlier PENDING/SCORED applications for this job as SUPERSEDED.
+
+    A Query on the job's partition with a filter on email: it reads every candidate of the job,
+    which is a handful of read units at this scale (see INTERFACES.md, duplicate applications).
+    """
+    earlier, kwargs = [], {
+        "KeyConditionExpression": Key("jobId").eq(job_id),
+        "FilterExpression": Attr("email").eq(email.lower()) & Attr("status").is_in(["PENDING", "SCORED"]),
+        "ProjectionExpression": "candidateId",
+    }
+    while True:
+        page = candidates_table.query(**kwargs)
+        earlier.extend(i["candidateId"] for i in page.get("Items", []) if i["candidateId"] != new_candidate_id)
+        if "LastEvaluatedKey" not in page:
+            break
+        kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+    for old in earlier:
+        try:
+            candidates_table.update_item(
+                Key={"jobId": job_id, "candidateId": old},
+                UpdateExpression="SET #s = :sup, supersededBy = :new, supersededAt = :t",
+                ConditionExpression="#s IN (:p, :sc)",
+                ExpressionAttributeNames={"#s": "status"},
+                ExpressionAttributeValues={":sup": "SUPERSEDED", ":new": new_candidate_id, ":t": now_iso(),
+                                           ":p": "PENDING", ":sc": "SCORED"},
+            )
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+    return earlier
 
 
 def candidate_status(event):
@@ -279,6 +362,7 @@ def candidate_status(event):
         "matchedSkills": c.get("matchedSkills", []),
         "missingSkills": c.get("missingSkills", []),
         "failureReason": c.get("failureReason"),
+        "supersededBy": c.get("supersededBy"),
     })
 
 
@@ -326,6 +410,24 @@ def create_job(event):
     if not isinstance(description, str) or len(description) > MAX_DESCRIPTION:
         raise BadRequest(f"'description' must be text of at most {MAX_DESCRIPTION} characters")
 
+    deadline = body.get("deadline") or None
+    if deadline is not None:
+        try:
+            parsed = date.fromisoformat(str(deadline))
+        except ValueError:
+            raise BadRequest("'deadline' must be a date in the form YYYY-MM-DD")
+        if parsed < today_local():
+            raise BadRequest("'deadline' cannot be in the past")
+        deadline = parsed.isoformat()
+
+    threshold = body.get("alertThreshold", DEFAULT_ALERT_THRESHOLD)
+    try:
+        threshold = int(threshold)
+    except (TypeError, ValueError):
+        raise BadRequest("'alertThreshold' must be a whole number")
+    if not 50 <= threshold <= 100:
+        raise BadRequest("'alertThreshold' must be between 50 and 100")
+
     item = {
         "jobId": str(uuid.uuid4()),
         "title": title,
@@ -333,7 +435,11 @@ def create_job(event):
         "minYears": min_years,
         "recruiterEmail": recruiter_email,
         "createdAt": now_iso(),
+        "status": "OPEN",
+        "alertThreshold": threshold,
     }
+    if deadline:
+        item["deadline"] = deadline
     if description.strip():
         item["description"] = description.strip()
     jobs_table.put_item(Item=item)
@@ -341,10 +447,33 @@ def create_job(event):
     return respond(201, item)
 
 
+def set_job_status(event):
+    require_recruiter(event)
+    body = parse_body(event)
+    job_id = id_field(body.get("jobId"), "jobId")
+    status = str(body.get("status", "")).upper()
+    if status not in JOB_STATUSES:
+        raise BadRequest("'status' must be OPEN or CLOSED")
+    try:
+        jobs_table.update_item(
+            Key={"jobId": job_id},
+            UpdateExpression="SET #s = :s, statusChangedAt = :t",
+            ConditionExpression="attribute_exists(jobId)",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":s": status, ":t": now_iso()},
+        )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise BadRequest("job not found", status=404)
+        raise
+    logger.info("job %s is now %s", job_id, status)
+    return respond(200, {"jobId": job_id, "status": status})
+
+
 CANDIDATE_FIELDS = (
     "candidateId", "name", "email", "status", "score", "skillScore", "expScore", "eduScore",
     "matchedSkills", "missingSkills", "yearsExperience", "textPreview", "createdAt", "processedAt",
-    "failureReason", "decision", "decidedAt",
+    "failureReason", "decision", "decidedAt", "note", "supersededBy",
 )
 
 
@@ -365,11 +494,15 @@ def list_candidates(event):
             break
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
 
-    candidates = []
-    for rank, item in enumerate(items, start=1):
+    candidates, rank = [], 0
+    for item in items:
         row = {f: item.get(f) for f in CANDIDATE_FIELDS}
         row["decision"] = row["decision"] or "NONE"
-        row["rank"] = rank
+        if row["status"] == "SUPERSEDED":
+            row["rank"] = None          # replaced by a newer application from the same email
+        else:
+            rank += 1
+            row["rank"] = rank
         candidates.append(row)
 
     return respond(200, {
@@ -385,22 +518,85 @@ def set_decision(event):
     body = parse_body(event)
     job_id = id_field(body.get("jobId"), "jobId")
     candidate_id = id_field(body.get("candidateId"), "candidateId")
-    decision = str(body.get("decision", "")).upper()
-    if decision not in DECISIONS:
-        raise BadRequest("'decision' must be SHORTLISTED, REJECTED or NONE")
+    has_decision = body.get("decision") is not None
+    has_note = "note" in body and body["note"] is not None
+    if not has_decision and not has_note:
+        raise BadRequest("give a 'decision', a 'note' or both")
+
+    sets, remove, values, out = [], [], {}, {"jobId": job_id, "candidateId": candidate_id}
+    if has_decision:
+        decision = str(body["decision"]).upper()
+        if decision not in DECISIONS:
+            raise BadRequest("'decision' must be SHORTLISTED, REJECTED or NONE")
+        sets += ["decision = :d", "decidedAt = :t"]
+        values.update({":d": decision, ":t": now_iso()})
+        out["decision"] = decision
+    if has_note:
+        note = body["note"]
+        if not isinstance(note, str):
+            raise BadRequest("'note' must be text")
+        note = note.strip()
+        if len(note) > MAX_NOTE:
+            raise BadRequest(f"'note' is too long (max {MAX_NOTE} characters)")
+        if note:
+            sets.append("note = :n")
+            values[":n"] = note
+        else:
+            remove.append("note")
+        out["note"] = note
+
+    expression = ("SET " + ", ".join(sets) if sets else "") + (" REMOVE " + ", ".join(remove) if remove else "")
+    kwargs = {"Key": {"jobId": job_id, "candidateId": candidate_id}, "UpdateExpression": expression.strip(),
+              "ConditionExpression": "attribute_exists(candidateId)"}
+    if values:
+        kwargs["ExpressionAttributeValues"] = values
     try:
-        candidates_table.update_item(
-            Key={"jobId": job_id, "candidateId": candidate_id},
-            UpdateExpression="SET decision = :d, decidedAt = :t",
-            ConditionExpression="attribute_exists(candidateId)",
-            ExpressionAttributeValues={":d": decision, ":t": now_iso()},
-        )
+        candidates_table.update_item(**kwargs)
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
             raise BadRequest("candidate not found", status=404)
         raise
-    logger.info("decision %s for %s/%s", decision, job_id, candidate_id)
-    return respond(200, {"jobId": job_id, "candidateId": candidate_id, "decision": decision})
+    logger.info("decision %s for %s/%s", out, job_id, candidate_id)
+    return respond(200, out)
+
+
+def send_shortlist(event):
+    require_recruiter(event)
+    if not SNS_TOPIC_ARN:
+        raise BadRequest("server is missing SNS_TOPIC_ARN", status=500)
+    job_id = id_field(parse_body(event).get("jobId"), "jobId")
+    job = get_job(job_id)
+
+    items, kwargs = [], {"IndexName": SCORE_INDEX, "KeyConditionExpression": Key("jobId").eq(job_id),
+                         "ScanIndexForward": False}
+    while True:
+        page = candidates_table.query(**kwargs)
+        items.extend(page.get("Items", []))
+        if "LastEvaluatedKey" not in page:
+            break
+        kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+    ranked = [i for i in items if i.get("status") != "SUPERSEDED"]
+    shortlist = [(n, i) for n, i in enumerate(ranked, start=1) if i.get("decision") == "SHORTLISTED"]
+    if not shortlist:
+        raise BadRequest("nobody is shortlisted for this job yet")
+
+    title = job.get("title", job_id)
+    lines = [f"Shortlist for {title}", f"Job ID: {job_id}", f"Sent: {now_iso()}",
+             f"{len(shortlist)} shortlisted candidate(s), in leaderboard order:", ""]
+    for rank, c in shortlist:
+        score = c.get("score") if c.get("status") == "SCORED" else "–"
+        lines.append(f"#{rank}  {c.get('name', '(no name)')}  –  score {score}")
+        if c.get("email"):
+            lines.append(f"     email:   {c['email']}")
+        lines.append(f"     matched: {', '.join(c.get('matchedSkills') or []) or '–'}")
+        if c.get("note"):
+            lines.append(f"     note:    {c['note']}")
+        lines.append("")
+    lines.append("Scores order the pile for human review; they are not a hiring decision.")
+    sns.publish(TopicArn=SNS_TOPIC_ARN, Subject=f"ResumeRank shortlist: {title} ({len(shortlist)} candidates)"[:100],
+                Message="\n".join(lines))
+    logger.info("shortlist of %d sent for %s", len(shortlist), job_id)
+    return respond(200, {"jobId": job_id, "sent": len(shortlist)})
 
 
 def resume_url(event):
@@ -426,6 +622,8 @@ def resume_url(event):
 ROUTES = {
     "GET /jobs": list_jobs,
     "POST /jobs": create_job,
+    "POST /jobs/status": set_job_status,
+    "POST /shortlist/send": send_shortlist,
     "POST /upload-url": create_upload_url,
     "GET /candidates": list_candidates,
     "GET /status": candidate_status,

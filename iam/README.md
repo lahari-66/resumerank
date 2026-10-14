@@ -7,7 +7,7 @@ recruiter features. Both roles also get the AWS managed policy **AWSLambdaBasicE
 | File | Attach to | Purpose |
 | --- | --- | --- |
 | `lambda-trust-policy.json` | both roles (trust relationship) | lets Lambda assume the role; the console adds this automatically when "Lambda" is chosen as the use case |
-| `role-api-policy.json` | `role-api` (inline policy `resumerank-api`) | Jobs: PutItem/GetItem/Scan (job list); Candidates + ScoreIndex: PutItem/GetItem/Query/UpdateItem (recruiter decisions); S3 PutObject/GetObject on `resumes/*` (signing upload and view-resume URLs) |
+| `role-api-policy.json` | `role-api` (inline policy `resumerank-api`) | Jobs: PutItem/GetItem/Scan/UpdateItem (job list, close / reopen); Candidates + ScoreIndex: PutItem/GetItem/Query/UpdateItem (decisions, notes, superseding duplicates); S3 PutObject/GetObject on `resumes/*` (signing upload and view-resume URLs); SNS Publish on `resumerank-alerts` (emailing the shortlist) |
 | `role-processor-policy.json` | `role-processor` (inline policy `resumerank-processor`) | SQS receive/delete on `resumerank-queue`; S3 GetObject on `resumes/*`; Textract async text detection; Comprehend key phrases + entities; DynamoDB GetItem/UpdateItem; SNS Publish on the one topic; PutMetricData limited to the `ResumeRank` namespace |
 | `sqs-queue-policy.json` | `resumerank-queue` (Access policy) | lets **only** the resumes bucket in this account send event notifications to the queue |
 

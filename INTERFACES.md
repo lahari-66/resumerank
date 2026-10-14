@@ -44,8 +44,9 @@ any of these – they are read from Lambda environment variables (and from the g
 | `UPLOAD_URL_TTL` (default `300`) | ✓ | |
 | `VIEW_URL_TTL` (default `300`) | ✓ | |
 | `MAX_UPLOAD_BYTES` (default `5242880`) | ✓ | |
-| `SNS_TOPIC_ARN` | | ✓ |
-| `SCORE_THRESHOLD` (default `75`) | | ✓ |
+| `SNS_TOPIC_ARN` | ✓ (shortlist email) | ✓ (score alerts) |
+| `DEADLINE_UTC_OFFSET_MINUTES` (default `330`, IST) | ✓ | |
+| `SCORE_THRESHOLD` (default `75`; a job's `alertThreshold` overrides it) | | ✓ |
 | `METRIC_NAMESPACE` (default `ResumeRank`) | | ✓ |
 | `TEXT_SOURCE` (default `auto`) | | ✓ |
 
@@ -88,6 +89,10 @@ resumes/{jobId}/{candidateId}.pdf
 | `recruiterEmail` | String | recruiter contact (see note on SNS below) |
 | `createdAt` | String | ISO-8601 UTC timestamp |
 | `description` | String | optional job description text (≤ 5,000 characters) |
+| `status` | String | `OPEN` \| `CLOSED`; absent means `OPEN` (jobs created before this field) |
+| `deadline` | String | optional `YYYY-MM-DD`; applications close at the end of that day, IST |
+| `alertThreshold` | Number | integer 50–100, default 75: the score at which `process_resume` emails the recruiter |
+| `statusChangedAt` | String | ISO-8601 UTC, set by `POST /jobs/status` |
 
 ### Table `Candidates`
 
@@ -97,7 +102,7 @@ resumes/{jobId}/{candidateId}.pdf
 | `candidateId` (SK) | String | API | UUID per upload |
 | `name` | String | API | from the upload form (file name for bulk uploads) |
 | `email` | String | API | from the upload form; absent for recruiter bulk uploads |
-| `status` | String | API → processor | `PENDING` → `SCORED` \| `FAILED` |
+| `status` | String | API → processor | `PENDING` → `SCORED` \| `FAILED`; API sets `SUPERSEDED` when the same email applies again |
 | `score` | Number | API (0) → processor | 0–100 composite score; **GSI sort key** |
 | `skillScore`, `expScore`, `eduScore` | Number | processor | component scores |
 | `matchedSkills`, `missingSkills` | List of String | processor | shown on the leaderboard |
@@ -109,6 +114,8 @@ resumes/{jobId}/{candidateId}.pdf
 | `failureReason` | String | processor | only when `status = FAILED` |
 | `decision` | String | API (recruiter) | `SHORTLISTED` \| `REJECTED` \| `NONE`; absent means `NONE` |
 | `decidedAt` | String | API (recruiter) | ISO-8601 UTC |
+| `note` | String | API (recruiter) | private recruiter note, ≤ 500 characters |
+| `supersededBy`, `supersededAt` | String | API | the newer `candidateId` and when it replaced this one |
 
 ### GSI `ScoreIndex`
 
@@ -129,6 +136,20 @@ resumes/{jobId}/{candidateId}.pdf
 - Uses `UpdateItem` (never `PutItem`) keyed on `jobId` + `candidateId`, so a repeated event
   is idempotent and never wipes `name` / `email`.
 - Numbers go through `Decimal` (boto3 rejects `float`).
+- The SCORED / FAILED write is conditional on `status <> SUPERSEDED`: if the candidate applied again
+  while this resume was still in the queue, the old record stays SUPERSEDED and no alert is sent.
+- The alert threshold is the job's `alertThreshold` when present, otherwise `SCORE_THRESHOLD`.
+
+### Duplicate applications (why a filtered Query)
+
+`POST /upload-url` with an `email` looks for an earlier application by the same email for the
+same job: a `Query` on the table's partition key `jobId` with a `FilterExpression` on `email`
+(case-insensitive match is done on the stored lower-cased value). A filter still reads every
+candidate of the job, but at this scale (tens to a few hundred per job, on-demand capacity) that
+is a few read units per upload. A GSI on `(jobId, email)` would make it an exact lookup and is the
+production choice; it was not added because it is a new index on a live table for no visible
+gain in the demo. Earlier `PENDING` or `SCORED` applications are marked `SUPERSEDED`;
+`FAILED` ones are left alone (the candidate can use `POST /reupload-url` for those).
 
 ---
 
@@ -146,13 +167,15 @@ candidate), `429` (API Gateway throttling) or `500` (unexpected).
 
 | Route | Access | Purpose |
 | --- | --- | --- |
-| `GET /jobs` | public | all jobs with applicant counts, or one job with `?jobId=` |
+| `GET /jobs` | public / recruiter | open jobs with applicant counts (recruiter key: every job), or one job with `?jobId=` |
 | `POST /upload-url` | public | PENDING candidate + pre-signed PUT URL |
 | `GET /status?jobId=&candidateId=` | public | a candidate's own result |
 | `POST /skills/extract` | public | skills found in a job description |
 | `POST /jobs` | recruiter | create a job |
 | `GET /candidates?jobId=` | recruiter | ranked leaderboard |
-| `POST /decision` | recruiter | shortlist / reject / clear |
+| `POST /jobs/status` | recruiter | close or reopen a job |
+| `POST /decision` | recruiter | shortlist / reject / clear, and an optional note |
+| `POST /shortlist/send` | recruiter | email the job's shortlist through the SNS topic |
 | `GET /resume-url?jobId=&candidateId=` | recruiter | 5-minute pre-signed GET URL to view the PDF |
 
 **Recruiter access:** recruiter routes require the header `x-recruiter-key` to equal the
@@ -175,6 +198,9 @@ Request:
 }
 ```
 
+Optional fields: `description` (≤ 5,000 characters), `deadline` (`YYYY-MM-DD`, today or later),
+`alertThreshold` (integer 50–100, default 75). New jobs start with `status: "OPEN"`.
+
 Rules: `title` non-empty; `requiredSkills` a non-empty list, trimmed + lower-cased +
 de-duplicated; `minYears` integer 0–15; `recruiterEmail` contains `@`.
 
@@ -187,9 +213,17 @@ Response `201`:
   "requiredSkills": ["aws", "docker", "linux", "python", "sql"],
   "minYears": 0,
   "recruiterEmail": "recruiter@example.com",
-  "createdAt": "2026-10-13T09:15:02Z"
+  "createdAt": "2026-10-13T09:15:02Z",
+  "status": "OPEN",
+  "deadline": "2026-10-31",
+  "alertThreshold": 80
 }
 ```
+
+### `POST /jobs/status`
+
+Request `{ "jobId": "…", "status": "CLOSED" }` (or `"OPEN"`) → `200 { "jobId": "…", "status": "CLOSED" }`;
+`404` for an unknown job. Closing does not delete anything – it only stops new applications.
 
 ### `POST /upload-url`
 
@@ -270,8 +304,18 @@ Each candidate also carries `email`, `createdAt`, `decision` (`NONE` when unset)
               "minYears": 2, "createdAt": "2026-10-14T05:00:00Z", "candidateCount": 5 } ] }
 ```
 
+Each job also carries `status`, `deadline`, `alertThreshold` and `acceptingApplications`
+(`true` when OPEN and the deadline has not passed). Without a recruiter key only jobs accepting
+applications are listed; with a valid `x-recruiter-key` header every job is listed, so the dashboard
+can grey out closed ones.
+
 With `?jobId=` the single job is returned (`title`, `requiredSkills`, `minYears`, `description`,
-`createdAt`). `recruiterEmail` is never returned by this public route.
+`createdAt`, `status`, `deadline`, `acceptingApplications`) even when closed, so a shared link can
+explain that the job is closed. `recruiterEmail` is never returned by this public route.
+
+`POST /upload-url` answers `400` with `"applications for this job are closed"` or
+`"the application deadline for this job (YYYY-MM-DD) has passed"` when the job is not accepting
+applications.
 
 ### `GET /status?jobId=&candidateId=`
 
@@ -286,8 +330,22 @@ canonical names from `skills.json`, first-mentioned first.
 
 ### `POST /decision`
 
-Request `{ "jobId": "…", "candidateId": "…", "decision": "SHORTLISTED" }` (or `REJECTED`, `NONE`)
-→ `200` with the same fields; `404` if the candidate does not exist.
+Request `{ "jobId": "…", "candidateId": "…", "decision": "SHORTLISTED", "note": "strong AWS projects" }`.
+`decision` is `SHORTLISTED`, `REJECTED` or `NONE`; `note` is optional (≤ 500 characters, `""` clears it).
+At least one of the two must be given; a note-only request keeps the current decision.
+→ `200` with the fields that were set; `404` if the candidate does not exist.
+
+### `POST /shortlist/send`
+
+Request `{ "jobId": "…" }` → publishes one plain-text message to `SNS_TOPIC_ARN` listing every
+SHORTLISTED candidate of the job (rank, name, email, score, matched skills), then
+`200 { "jobId": "…", "sent": 3 }`. `400` if nothing is shortlisted.
+
+### `GET /candidates` – superseded applications
+
+Candidates with `status: "SUPERSEDED"` are still returned (with `rank: null`); the rank counts
+only the others. Each candidate also carries `note`. The leaderboard hides SUPERSEDED rows unless
+the filter "Replaced applications" is chosen.
 
 ### `GET /resume-url?jobId=&candidateId=`
 
@@ -333,10 +391,14 @@ must be removed before the demo.
 
 ## 5. SNS alert
 
-`process_resume` publishes to `SNS_TOPIC_ARN` when `score >= SCORE_THRESHOLD` (75).
+`process_resume` publishes to `SNS_TOPIC_ARN` when `score >=` the job's `alertThreshold`
+(default `SCORE_THRESHOLD`, 75).
 Subject: `ResumeRank: <name> scored <score> for <job title>`. Body lists candidate name,
 email, score, component scores and matched / missing skills.
 
 > Note: an SNS topic delivers to **all** confirmed subscribers, so `recruiterEmail` on the
 > job is informational in this prototype (the topic's subscriptions decide who is emailed).
 > Per-job routing would need a subscription filter policy – listed as future work.
+
+`api_handler` publishes the recruiter's shortlist to the same topic (`POST /shortlist/send`).
+Subject: `ResumeRank shortlist: <job title> (<n> candidates)`.
