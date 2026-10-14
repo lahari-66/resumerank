@@ -4,8 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ResumeRank – Recruiter Dashboard</title>
+  <script>try{document.documentElement.setAttribute("data-theme",localStorage.getItem("resumerank.theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"))}catch(e){}</script>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="qrcode.js"></script>
 </head>
 <body>
   <main>
@@ -28,6 +30,7 @@
           <h2 style="margin:0">Jobs</h2>
           <button class="small" id="new-job-btn">+ New job</button>
         </div>
+        <button class="secondary small" id="insights-btn" style="margin-top:12px; width:100%">All-jobs insights</button>
         <ul class="job-list" id="job-list" style="margin-top:12px"><li class="meta">Loading…</li></ul>
         <button class="ghost small" id="sign-out" style="margin-top:12px">Sign out</button>
       </aside>
@@ -72,10 +75,16 @@
                 <p class="meta" id="jv-meta" style="margin:0 0 6px"></p>
                 <div id="jv-skills"></div>
               </div>
-              <div style="min-width:240px">
-                <p class="meta" style="margin:0">Candidate application link</p>
-                <a id="share-link" class="mono" target="_blank" rel="noopener"></a>
-                <div><button class="small secondary" id="copy-link" style="margin-top:6px">Copy link</button></div>
+              <div class="share-box">
+                <canvas id="qr" width="132" height="132" aria-label="QR code of the application link"></canvas>
+                <div style="max-width:280px">
+                  <p class="meta" style="margin:0">Candidate application link – scan or share</p>
+                  <a id="share-link" class="mono" target="_blank" rel="noopener"></a>
+                  <div class="toolbar" style="margin:8px 0 0">
+                    <button class="small secondary" id="copy-link">Copy link</button>
+                    <button class="small secondary" id="qr-download">Download QR</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -116,12 +125,23 @@
                 <option value="strong">Score 75+</option>
               </select>
               <button class="secondary" id="export">Export CSV</button>
+              <label class="switch" title="Names and emails stay hidden until a candidate is shortlisted">
+                <input type="checkbox" id="anon"> Hide names until shortlisted
+              </label>
               <span class="meta" id="refreshed"></span>
             </div>
+            <div id="compare-card" class="card hidden" style="box-shadow:none">
+              <div style="display:flex; justify-content:space-between; align-items:center">
+                <h3 style="margin:0">Compare candidates</h3>
+                <button class="small secondary" id="compare-clear">Clear</button>
+              </div>
+              <div class="compare-grid" id="compare-grid" style="margin-top:10px"></div>
+            </div>
+            <p class="meta" id="compare-hint" style="margin:0 0 8px">Tick “Compare” on two rows to see them side by side.</p>
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>#</th><th>Name</th><th>Score</th><th>Matched</th><th>Missing</th><th>Status</th><th>Decision</th><th></th></tr>
+                  <tr><th>Compare</th><th>#</th><th>Name</th><th>Score</th><th>Matched</th><th>Missing</th><th>Status</th><th>Decision</th><th></th></tr>
                 </thead>
                 <tbody id="rows"></tbody>
               </table>
@@ -130,9 +150,26 @@
           </div>
         </div>
 
-        <div class="card hidden" id="empty-view">
-          <h2>Welcome</h2>
-          <p class="meta">Select a job on the left or post a new one.</p>
+        <div id="empty-view" class="hidden">
+          <div class="card">
+            <h2>All-jobs insights</h2>
+            <p class="meta" id="ins-meta">Loading every job's candidates…</p>
+            <div class="stats" style="margin:12px 0 0">
+              <div class="stat"><div class="value" id="ins-jobs">–</div><div class="label">Jobs analysed</div></div>
+              <div class="stat"><div class="value" id="ins-cands">–</div><div class="label">Scored candidates</div></div>
+              <div class="stat"><div class="value" id="ins-avg">–</div><div class="label">Average score</div></div>
+              <div class="stat good"><div class="value" id="ins-strong">–</div><div class="label">Score 75+</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Top 10 skill gaps across all jobs</h3>
+            <p class="meta" style="margin-top:0">How many scored candidates were missing each required skill, counted over every job. Useful for
+              deciding which skills to train or to advertise for.</p>
+            <div class="chart-box" style="height:320px"><canvas id="chart-insights"></canvas></div>
+            <div class="table-wrap"><table><thead><tr><th>Skill</th><th>Candidates missing it</th><th>Jobs requiring it</th></tr></thead>
+              <tbody id="ins-rows"></tbody></table></div>
+          </div>
+          <p class="meta">Select a job on the left to see its leaderboard, or post a new one.</p>
         </div>
       </section>
     </div>
@@ -172,7 +209,41 @@
     RR.nav("recruiter.html");
     const $ = (id) => document.getElementById(id);
     const REFRESH_MS = 5000;
-    const state = { jobs: [], jobId: "", data: null, timer: null, skills: [], drawer: null, charts: {} };
+    const state = { jobs: [], jobId: "", data: null, timer: null, skills: [], drawer: null, charts: {},
+                    compare: [], cache: {} };
+    const ANON_STORE = "resumerank.anonymise";
+    try { $("anon").checked = sessionStorage.getItem(ANON_STORE) === "1"; } catch (e) { /* storage blocked */ }
+
+    // ------------------------------------------------------------ anonymised screening
+    function anonymised() { return $("anon").checked; }
+    function masked(c) { return anonymised() && c.decision !== "SHORTLISTED"; }
+    function displayName(c) { return masked(c) ? "Candidate #" + c.rank : (c.name || "(no name)"); }
+    function displayEmail(c) { return masked(c) ? "" : (c.email || ""); }
+    $("anon").addEventListener("change", () => {
+      try { sessionStorage.setItem(ANON_STORE, anonymised() ? "1" : "0"); } catch (e) { /* ignore */ }
+      renderRows();
+      renderCompare();
+      if (state.drawer && state.data) {
+        const c = state.data.candidates.find((x) => x.candidateId === state.drawer);
+        if (c) fillDrawer(c);
+      }
+    });
+
+    // ------------------------------------------------------------ chart colours follow the theme
+    function chartTheme() {
+      if (!window.Chart) return;
+      const css = getComputedStyle(document.documentElement);
+      Chart.defaults.color = css.getPropertyValue("--muted").trim() || "#5f6b7d";
+      Chart.defaults.borderColor = css.getPropertyValue("--border").trim() || "#dde3ee";
+    }
+    chartTheme();
+    document.addEventListener("rr-theme", () => {
+      chartTheme();
+      Object.values(state.charts).forEach((ch) => ch.destroy());
+      state.charts = {};
+      if (state.data) renderCharts(state.data.job, state.data.candidates.filter((c) => c.status === "SCORED"));
+      if (!$("empty-view").classList.contains("hidden")) renderInsights();
+    });
 
     // ------------------------------------------------------------ access key
     function showGate(text) {
@@ -211,6 +282,8 @@
         ]));
       });
     }
+
+    $("insights-btn").addEventListener("click", () => showInsights());
 
     function showPanel(which) {
       ["job-form-card", "job-view", "empty-view"].forEach((id) => $(id).classList.toggle("hidden", id !== which));
@@ -296,6 +369,9 @@
       share.search = "?jobId=" + encodeURIComponent(jobId);
       $("share-link").href = share.href;
       $("share-link").textContent = share.href;
+      drawQr(share.href);
+      state.compare = [];
+      renderCompare();
       document.querySelectorAll("#job-list li").forEach((li, i) => li.classList.toggle("active", state.jobs[i] && state.jobs[i].jobId === jobId));
       clearInterval(state.timer);
       refresh();
@@ -303,11 +379,42 @@
     }
     $("copy-link").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText($("share-link").href));
 
+    // ------------------------------------------------------------ QR code (qrcode.js, inlined – no CDN)
+    function drawQr(text) {
+      const canvas = $("qr");
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (typeof qrcode !== "function") return;
+      const qr = qrcode(0, "M");          // smallest version that fits, medium error correction
+      qr.addData(text);
+      qr.make();
+      const n = qr.getModuleCount();
+      const quiet = 2;
+      const cell = Math.floor(canvas.width / (n + quiet * 2));
+      const offset = Math.floor((canvas.width - cell * n) / 2);
+      ctx.fillStyle = "#000";
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (qr.isDark(r, c)) ctx.fillRect(offset + c * cell, offset + r * cell, cell, cell);
+        }
+      }
+    }
+    $("qr-download").addEventListener("click", () => {
+      const job = state.jobs.find((j) => j.jobId === state.jobId);
+      const a = RR.el("a", { attrs: { href: $("qr").toDataURL("image/png"),
+        download: ((job && job.title) || "job").replace(/[^\w-]+/g, "_") + "-apply-qr.png" } });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
+
     async function refresh() {
       if (!state.jobId) return;
       try {
         const data = await guarded(() => RR.api("/candidates?jobId=" + encodeURIComponent(state.jobId), { recruiter: true }));
         state.data = data;
+        state.cache[data.jobId] = data;
         renderJob(data);
         $("refreshed").textContent = "updated " + new Date().toLocaleTimeString() + " · every 5 s";
         RR.hide($("board-message"));
@@ -372,7 +479,8 @@
         if (["SCORED", "PENDING", "FAILED"].includes(f) && c.status !== f) return false;
         if (["SHORTLISTED", "REJECTED"].includes(f) && c.decision !== f) return false;
         if (!q) return true;
-        return [c.name, c.email, ...(c.matchedSkills || []), ...(c.missingSkills || [])]
+        const who = masked(c) ? [displayName(c)] : [c.name, c.email];   // never search hidden names
+        return [...who, ...(c.matchedSkills || []), ...(c.missingSkills || [])]
           .some((v) => v && String(v).toLowerCase().includes(q));
       });
     }
@@ -383,15 +491,20 @@
       const rows = filtered();
       if (!rows.length) {
         const td = RR.el("td", { cls: "meta", text: state.data && state.data.count ? "No candidates match this filter." : "No candidates yet – share the application link or use bulk upload." });
-        td.colSpan = 8;
+        td.colSpan = 9;
         body.appendChild(RR.el("tr", {}, [td]));
         return;
       }
       rows.forEach((c) => {
         const decision = c.decision && c.decision !== "NONE" ? RR.el("span", { cls: "decision " + c.decision, text: c.decision }) : RR.el("span", { cls: "meta", text: "–" });
+        const box = RR.el("input", { attrs: { type: "checkbox", "aria-label": "compare " + displayName(c) },
+          on: { change: (e) => toggleCompare(c.candidateId, e.target) } });
+        box.checked = state.compare.includes(c.candidateId);
         body.appendChild(RR.el("tr", {}, [
+          RR.el("td", { cls: "compare-cell" }, [box]),
           RR.el("td", { text: c.status === "SCORED" ? c.rank : "–" }),
-          RR.el("td", {}, [RR.el("div", { text: c.name || "(no name)" }), RR.el("div", { cls: "meta", text: c.email || "" })]),
+          RR.el("td", {}, [RR.el("div", { text: displayName(c), cls: masked(c) ? "masked" : "" }),
+                           RR.el("div", { cls: "meta", text: displayEmail(c) })]),
           RR.el("td", {}, [RR.scoreBadge(c)]),
           RR.el("td", {}, [RR.chips(c.matchedSkills, "match")]),
           RR.el("td", {}, [RR.chips(c.missingSkills, "miss")]),
@@ -401,6 +514,47 @@
         ]));
       });
     }
+    // ------------------------------------------------------------ compare two candidates
+    function toggleCompare(id, box) {
+      if (box.checked) {
+        if (state.compare.length >= 2) { box.checked = false; RR.show($("board-message"), "You can compare two candidates at a time – untick one first.", "info"); return; }
+        state.compare.push(id);
+      } else {
+        state.compare = state.compare.filter((x) => x !== id);
+      }
+      renderCompare();
+    }
+    function renderCompare() {
+      const picked = state.data ? state.compare.map((id) => state.data.candidates.find((c) => c.candidateId === id)).filter(Boolean) : [];
+      $("compare-card").classList.toggle("hidden", picked.length !== 2);
+      $("compare-hint").classList.toggle("hidden", picked.length === 2);
+      if (picked.length !== 2) return;
+      const [a, b] = picked;
+      const num = (v) => (v === null || v === undefined ? null : Number(v));
+      const rows = [
+        ["Score", (c) => (c.status === "SCORED" ? c.score : "–"), (c) => num(c.status === "SCORED" ? c.score : null)],
+        ["Skills", (c) => (c.skillScore ?? "–"), (c) => num(c.skillScore)],
+        ["Experience", (c) => (c.expScore ?? "–"), (c) => num(c.expScore)],
+        ["Education", (c) => (c.eduScore ?? "–"), (c) => num(c.eduScore)],
+        ["Years (est.)", (c) => (c.yearsExperience ?? "–"), (c) => num(c.yearsExperience)],
+        ["Matched skills", (c) => (c.matchedSkills || []).join(", ") || "–", (c) => (c.matchedSkills || []).length],
+        ["Missing skills", (c) => (c.missingSkills || []).join(", ") || "–", (c) => -(c.missingSkills || []).length],
+        ["Status", (c) => c.status, null],
+        ["Decision", (c) => (c.decision && c.decision !== "NONE" ? c.decision : "–"), null],
+      ];
+      const cells = [RR.el("div", { cls: "head", text: "" }),
+                     RR.el("div", { cls: "head", text: displayName(a) }), RR.el("div", { cls: "head", text: displayName(b) })];
+      rows.forEach(([label, show, rank]) => {
+        const va = rank ? rank(a) : null;
+        const vb = rank ? rank(b) : null;
+        cells.push(RR.el("div", { cls: "label", text: label }));
+        cells.push(RR.el("div", { text: show(a), cls: va !== null && vb !== null && va > vb ? "better" : "" }));
+        cells.push(RR.el("div", { text: show(b), cls: va !== null && vb !== null && vb > va ? "better" : "" }));
+      });
+      $("compare-grid").replaceChildren(...cells);
+    }
+    $("compare-clear").addEventListener("click", () => { state.compare = []; renderRows(); renderCompare(); });
+
     $("search").addEventListener("input", renderRows);
     $("filter").addEventListener("change", renderRows);
 
@@ -414,7 +568,8 @@
         const s = Array.isArray(v) ? v.join("; ") : (v ?? "");
         return /[",\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
       };
-      const csv = [cols.join(","), ...rows.map((r) => cols.map((k) => cell(r[k])).join(","))].join("\r\n");
+      const value = (r, k) => (k === "name" ? displayName(r) : k === "email" ? displayEmail(r) : r[k]);
+      const csv = [cols.join(","), ...rows.map((r) => cols.map((k) => cell(value(r, k))).join(","))].join("\r\n");
       const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
       const a = RR.el("a", { attrs: { href: URL.createObjectURL(blob), download: (state.data.job.title || "candidates").replace(/[^\w-]+/g, "_") + ".csv" } });
       document.body.appendChild(a);
@@ -461,8 +616,8 @@
               RR.el("span", { cls: "meta", text: (value ?? 0) + " / " + max })];
     }
     function fillDrawer(c) {
-      $("d-name").textContent = c.name || "(no name)";
-      $("d-meta").textContent = [c.email, c.yearsExperience != null ? c.yearsExperience + " yrs experience (est.)" : null,
+      $("d-name").textContent = displayName(c);
+      $("d-meta").textContent = [displayEmail(c), c.yearsExperience != null ? c.yearsExperience + " yrs experience (est.)" : null,
         "submitted " + RR.when(c.createdAt), c.processedAt ? "processed " + RR.when(c.processedAt) : null].filter(Boolean).join(" · ");
       $("d-score").replaceChildren(RR.scoreBadge(c));
       $("d-status").replaceChildren(RR.el("span", { cls: "status " + c.status, text: c.status }));
@@ -471,7 +626,8 @@
       $("d-matched").replaceChildren(RR.chips(c.matchedSkills, "match"));
       $("d-missing").replaceChildren(RR.chips(c.missingSkills, "miss"));
       if (c.failureReason) RR.show($("d-failure"), c.failureReason, "error"); else RR.hide($("d-failure"));
-      $("d-preview").textContent = c.textPreview || "(no text extracted yet)";
+      $("d-preview").textContent = masked(c) ? "(hidden while names are hidden – the extracted text starts with the candidate's name and contact details)"
+        : (c.textPreview || "(no text extracted yet)");
     }
     function openDrawer(c) {
       state.drawer = c.candidateId;
@@ -511,12 +667,69 @@
     $("d-reject").addEventListener("click", () => decide("REJECTED"));
     $("d-clear").addEventListener("click", () => decide("NONE"));
 
+    // ------------------------------------------------------------ cross-job insights (landing view)
+    async function showInsights() {
+      clearInterval(state.timer);
+      state.jobId = "";
+      showPanel("empty-view");
+      document.querySelectorAll("#job-list li").forEach((li) => li.classList.remove("active"));
+      const url = new URL(location.href);
+      url.searchParams.delete("jobId");
+      history.replaceState(null, "", url);
+      const jobs = state.jobs.slice(0, 25);
+      $("ins-meta").textContent = `Loading candidates for ${jobs.length} job(s)…`;
+      const queue = jobs.filter((j) => !state.cache[j.jobId]);
+      async function worker() {
+        while (queue.length) {
+          const j = queue.shift();
+          try {
+            state.cache[j.jobId] = await guarded(() => RR.api("/candidates?jobId=" + encodeURIComponent(j.jobId), { recruiter: true }));
+          } catch (e) { if (e.status === 401) return; }
+        }
+      }
+      await Promise.all([worker(), worker(), worker()]);
+      renderInsights();
+    }
+
+    function renderInsights() {
+      const loaded = state.jobs.map((j) => state.cache[j.jobId]).filter(Boolean);
+      const missing = {}, required = {};
+      let scoredCount = 0, total = 0, strong = 0;
+      loaded.forEach((d) => {
+        (d.job.requiredSkills || []).forEach((s) => { required[s] = (required[s] || 0) + 1; });
+        d.candidates.filter((c) => c.status === "SCORED").forEach((c) => {
+          scoredCount += 1;
+          total += c.score;
+          if (c.score >= 75) strong += 1;
+          (c.missingSkills || []).forEach((s) => { missing[s] = (missing[s] || 0) + 1; });
+        });
+      });
+      const top = Object.entries(missing).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, 10);
+      $("ins-jobs").textContent = loaded.length;
+      $("ins-cands").textContent = scoredCount;
+      $("ins-avg").textContent = scoredCount ? Math.round(total / scoredCount) : "–";
+      $("ins-strong").textContent = strong;
+      $("ins-meta").textContent = `Aggregated over ${loaded.length} job(s) and ${scoredCount} scored candidate(s).`;
+      $("ins-rows").replaceChildren(...(top.length ? top.map(([skill, n]) => RR.el("tr", {}, [
+        RR.el("td", {}, [RR.el("span", { cls: "chip miss", text: skill })]),
+        RR.el("td", { text: n }), RR.el("td", { text: required[skill] || 0 })]))
+        : [RR.el("tr", {}, [RR.el("td", { cls: "meta", text: "No skill gaps yet – candidates need to be scored first." })])]));
+      if (!window.Chart) return;
+      if (state.charts.insights) state.charts.insights.destroy();
+      state.charts.insights = new Chart($("chart-insights"), {
+        type: "bar",
+        data: { labels: top.map((t) => t[0]), datasets: [{ label: "candidates missing this skill", data: top.map((t) => t[1]), backgroundColor: "#f87171" }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: "y",
+                   plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+      });
+    }
+
     // ------------------------------------------------------------ start
     async function boot() {
       try { await loadJobs(); } catch (e) { RR.show($("board-message"), "Could not load jobs: " + e.message, "error"); }
       const wanted = RR.param("jobId");
       if (wanted) selectJob(wanted);
-      else if (state.jobs.length) selectJob(state.jobs[0].jobId);
+      else if (state.jobs.length) showInsights();
       else $("new-job-btn").click();
     }
 
