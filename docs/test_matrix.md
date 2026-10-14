@@ -55,3 +55,20 @@ Notes:
 | Failure visible | upload a corrupt / password-protected PDF | status FAILED with reason on the leaderboard |
 | No duplicate scoring | re-check CloudWatch after R1: one invocation, one SNS email | async retries = 0 |
 | Hand-check two scores | recompute skills/exp/edu by hand from the PDF | equals leaderboard |
+
+## Load test (scaling evidence)
+
+`python scripts/load_test.py 40 20` – 40 uploads of R1/R2/R4/R5/R6 through the real API
+(pre-signed URL + S3 PUT), 20 in parallel, against the deployed stack (14 Oct 2026):
+
+| Measure | Result |
+| --- | --- |
+| Upload burst | 40 uploads in 2.7 s (14.6 uploads/s), upload latency p50 0.97 s / p95 1.59 s |
+| Queue drain | PENDING 36 → 15 → 0 at t+3 s, t+6 s, t+9.4 s |
+| End-to-end | all 40 scored in 9.4 s (4.3 resumes/s) with Lambda capped at 5 concurrent |
+| Per resume upload → scored | p50 4 s, p95 5 s, max 6 s |
+| Correctness under load | mean score 74.8 = mean of the expected R1/R2/R4/R5/R6 scores (100, 90, 44, 40, 100) |
+| Throttling | 0 × 429 at 20 parallel clients (API limit: rate 20/s, burst 50) |
+
+Screenshot the CloudWatch dashboard (last 15 minutes) for the report: Lambda concurrent
+executions, SQS queue depth and API Gateway requests.

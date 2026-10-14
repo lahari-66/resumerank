@@ -1,45 +1,347 @@
 {
   "widgets": [
     {
-      "type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
       "properties": {
-        "title": "Invocations", "region": "ap-south-1", "stat": "Sum", "period": 300, "view": "timeSeries",
+        "title": "Invocations",
+        "region": "ap-south-1",
+        "stat": "Sum",
+        "period": 300,
+        "view": "timeSeries",
         "metrics": [
-          ["AWS/Lambda", "Invocations", "FunctionName", "process_resume"],
-          ["AWS/Lambda", "Invocations", "FunctionName", "api_handler"]
+          [
+            "AWS/Lambda",
+            "Invocations",
+            "FunctionName",
+            "process_resume"
+          ],
+          [
+            "AWS/Lambda",
+            "Invocations",
+            "FunctionName",
+            "api_handler"
+          ]
         ]
       }
     },
     {
-      "type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
       "properties": {
-        "title": "Errors", "region": "ap-south-1", "stat": "Sum", "period": 300, "view": "timeSeries",
+        "title": "Errors",
+        "region": "ap-south-1",
+        "stat": "Sum",
+        "period": 300,
+        "view": "timeSeries",
         "metrics": [
-          ["AWS/Lambda", "Errors", "FunctionName", "process_resume"],
-          ["AWS/Lambda", "Errors", "FunctionName", "api_handler"]
+          [
+            "AWS/Lambda",
+            "Errors",
+            "FunctionName",
+            "process_resume"
+          ],
+          [
+            "AWS/Lambda",
+            "Errors",
+            "FunctionName",
+            "api_handler"
+          ]
         ]
       }
     },
     {
-      "type": "metric", "x": 0, "y": 6, "width": 12, "height": 6,
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
       "properties": {
-        "title": "Duration (ms, average)", "region": "ap-south-1", "stat": "Average", "period": 300, "view": "timeSeries",
+        "title": "Duration (ms, average)",
+        "region": "ap-south-1",
+        "stat": "Average",
+        "period": 300,
+        "view": "timeSeries",
         "metrics": [
-          ["AWS/Lambda", "Duration", "FunctionName", "process_resume"],
-          ["AWS/Lambda", "Duration", "FunctionName", "api_handler"]
+          [
+            "AWS/Lambda",
+            "Duration",
+            "FunctionName",
+            "process_resume"
+          ],
+          [
+            "AWS/Lambda",
+            "Duration",
+            "FunctionName",
+            "api_handler"
+          ]
         ]
       }
     },
     {
-      "type": "metric", "x": 12, "y": 6, "width": 12, "height": 6,
+      "type": "metric",
+      "x": 12,
+      "y": 6,
+      "width": 12,
+      "height": 6,
       "properties": {
-        "title": "CandidateScore", "region": "ap-south-1", "period": 300, "view": "timeSeries",
+        "title": "CandidateScore",
+        "region": "ap-south-1",
+        "period": 300,
+        "view": "timeSeries",
         "metrics": [
-          ["ResumeRank", "CandidateScore", { "stat": "Average", "label": "average" }],
-          ["ResumeRank", "CandidateScore", { "stat": "Maximum", "label": "max" }],
-          ["ResumeRank", "CandidateScore", { "stat": "SampleCount", "label": "resumes scored", "yAxis": "right" }]
+          [
+            "ResumeRank",
+            "CandidateScore",
+            {
+              "stat": "Average",
+              "label": "average"
+            }
+          ],
+          [
+            "ResumeRank",
+            "CandidateScore",
+            {
+              "stat": "Maximum",
+              "label": "max"
+            }
+          ],
+          [
+            "ResumeRank",
+            "CandidateScore",
+            {
+              "stat": "SampleCount",
+              "label": "resumes scored",
+              "yAxis": "right"
+            }
+          ]
         ],
-        "yAxis": { "left": { "min": 0, "max": 100 } }
+        "yAxis": {
+          "left": {
+            "min": 0,
+            "max": 100
+          }
+        }
+      }
+    },
+    {
+      "type": "text",
+      "x": 0,
+      "y": 12,
+      "width": 24,
+      "height": 1,
+      "properties": {
+        "markdown": "### Scaling and load handling \u2013 run `python scripts/load_test.py` and watch these"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 13,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "process_resume concurrent executions (auto scaling)",
+        "region": "ap-south-1",
+        "stat": "Maximum",
+        "period": 60,
+        "view": "timeSeries",
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "ConcurrentExecutions",
+            "FunctionName",
+            "process_resume"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 13,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "SQS queue depth (load levelling)",
+        "region": "ap-south-1",
+        "stat": "Maximum",
+        "period": 60,
+        "view": "timeSeries",
+        "metrics": [
+          [
+            "AWS/SQS",
+            "ApproximateNumberOfMessagesVisible",
+            "QueueName",
+            "resumerank-queue",
+            {
+              "label": "waiting"
+            }
+          ],
+          [
+            "AWS/SQS",
+            "ApproximateNumberOfMessagesNotVisible",
+            "QueueName",
+            "resumerank-queue",
+            {
+              "label": "in flight"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 13,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "SQS messages sent / processed",
+        "region": "ap-south-1",
+        "stat": "Sum",
+        "period": 60,
+        "view": "timeSeries",
+        "metrics": [
+          [
+            "AWS/SQS",
+            "NumberOfMessagesSent",
+            "QueueName",
+            "resumerank-queue",
+            {
+              "label": "sent by S3"
+            }
+          ],
+          [
+            "AWS/SQS",
+            "NumberOfMessagesDeleted",
+            "QueueName",
+            "resumerank-queue",
+            {
+              "label": "processed"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 19,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "API Gateway requests and errors (throttling = 4xx)",
+        "region": "ap-south-1",
+        "stat": "Sum",
+        "period": 60,
+        "view": "timeSeries",
+        "metrics": [
+          [
+            "AWS/ApiGateway",
+            "Count",
+            "ApiId",
+            "<API_ID>",
+            {
+              "label": "requests"
+            }
+          ],
+          [
+            "AWS/ApiGateway",
+            "4xx",
+            "ApiId",
+            "<API_ID>",
+            {
+              "label": "4xx (incl. 429)"
+            }
+          ],
+          [
+            "AWS/ApiGateway",
+            "5xx",
+            "ApiId",
+            "<API_ID>",
+            {
+              "label": "5xx"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 19,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "API Gateway latency (ms)",
+        "region": "ap-south-1",
+        "stat": "Average",
+        "period": 60,
+        "view": "timeSeries",
+        "metrics": [
+          [
+            "AWS/ApiGateway",
+            "Latency",
+            "ApiId",
+            "<API_ID>",
+            {
+              "stat": "Average",
+              "label": "average"
+            }
+          ],
+          [
+            "AWS/ApiGateway",
+            "Latency",
+            "ApiId",
+            "<API_ID>",
+            {
+              "stat": "p90",
+              "label": "p90"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 19,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Dead-letter queue + Lambda throttles",
+        "region": "ap-south-1",
+        "stat": "Maximum",
+        "period": 60,
+        "view": "timeSeries",
+        "metrics": [
+          [
+            "AWS/SQS",
+            "ApproximateNumberOfMessagesVisible",
+            "QueueName",
+            "resumerank-dlq",
+            {
+              "label": "in DLQ"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Throttles",
+            "FunctionName",
+            "process_resume",
+            {
+              "stat": "Sum",
+              "label": "lambda throttles"
+            }
+          ]
+        ]
       }
     }
   ]
