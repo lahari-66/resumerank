@@ -3,6 +3,20 @@
 const RR = (() => {
   const API = ((window.RESUMERANK_CONFIG || {}).apiBaseUrl || "").replace(/\/+$/, "");
   const KEY_STORE = "resumerank.recruiterKey";
+  const THEME_STORE = "resumerank.theme";
+
+  // dark mode: <html data-theme="dark|light">, remembered per browser in localStorage
+  function savedTheme() {
+    try { return localStorage.getItem(THEME_STORE); } catch (e) { return null; }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem(THEME_STORE, theme); } catch (e) { /* storage blocked */ }
+    document.dispatchEvent(new CustomEvent("rr-theme", { detail: theme }));
+  }
+  document.documentElement.setAttribute("data-theme", savedTheme() ||
+    (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  function theme() { return document.documentElement.getAttribute("data-theme"); }
 
   function recruiterKey() {
     try { return sessionStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; }
@@ -98,10 +112,18 @@ const RR = (() => {
       el("nav", { cls: "nav-links" }, links.map(([href, label]) =>
         el("a", { text: label, cls: href === active ? "active" : "", attrs: { href } }))),
       el("span", { cls: "nav-tag", text: "Serverless on AWS" }),
+      el("button", {
+        cls: "theme-toggle", text: theme() === "dark" ? "☀ Light" : "☾ Dark",
+        attrs: { type: "button", "aria-label": "Toggle dark mode" },
+        on: { click: (e) => {
+          applyTheme(theme() === "dark" ? "light" : "dark");
+          e.currentTarget.textContent = theme() === "dark" ? "☀ Light" : "☾ Dark";
+        } },
+      }),
     ]);
     document.body.prepend(bar);
   }
 
   return { API, api, uploadResume, el, chips, band, scoreBadge, when, show, hide, param, nav,
-           recruiterKey, setRecruiterKey };
+           recruiterKey, setRecruiterKey, theme };
 })();
