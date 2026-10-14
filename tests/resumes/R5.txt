@@ -1,12 +1,29 @@
 Sneha Kulkarni
-sneha.kulkarni@example.com  |  +91 90000 00005  |  Pune
-SUMMARY
-Mechanical design engineer with 5 years of experience in product design.
-EXPERIENCE
-Design Engineer, Apex Motors   Jun 2019 - May 2024
-- Modelled gearbox housings in SolidWorks and AutoCAD.
-- Ran structural simulations in ANSYS and MATLAB.
-SKILLS
-SolidWorks, AutoCAD, ANSYS, MATLAB, CATIA, Teamwork
-EDUCATION
-M.Tech in Machine Design, Western University of Engineering   2017 - 2019
+M.Tech Machine Design · Applied ML Engineer
+sneha.kulkarni@example.com | +91 90000 00005 | github.com/sneha-kulkarni-example
+Summary
+• Applied machine-learning engineer with 5 years of experience in predictive maintenance for manufacturing.
+Education
+Western University of Engineering, Pune   2017 – 2019
+M.Tech in Machine Design – CGPA: 8.7/10
+Western University of Engineering, Pune   2013 – 2017
+B.E. in Mechanical Engineering – CGPA: 8.2/10
+Technical Skills
+• Languages: R, MATLAB, Julia, C++
+• Machine Learning: Machine Learning, Deep Learning, Statistics, Computer Vision
+• Data & Tools: Tableau, Microsoft Excel, Simulink
+• Engineering: SolidWorks, ANSYS, AutoCAD
+Experience
+ML Engineer – Apex Motors, Pune   Jun 2019 – May 2024
+• Built vibration-based failure models in MATLAB that flag 87% of gearbox faults 10 days early.
+• Cut unplanned downtime on 3 assembly lines by 23% in the first year of deployment.
+• Trained a defect-detection model on 18,000 images of cast parts with 94% recall.
+Projects
+Bearing Fault Classifier | MATLAB · Deep Learning Toolbox   2023
+github.com/sneha-kulkarni-example/bearing-faults
+• Classifies 4 fault types from 12 kHz vibration signals at 96% accuracy.
+Tool-Wear Forecasting | R · tidymodels   2022
+github.com/sneha-kulkarni-example/tool-wear
+• Forecasts cutting-tool wear 50 cycles ahead with a mean error of 4%.
+Achievements and Positions of Responsibility
+• Best Paper – National Conference on Smart Manufacturing (2023)

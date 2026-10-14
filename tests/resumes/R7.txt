@@ -1,0 +1,32 @@
+Priya Nair
+B.Tech Computer Science & Engineering · 2023 – Expected 2027
+priya.nair@example.com | +91 90000 00007 | linkedin.com/in/priya-nair-example | github.com/priya-nair-example
+Education
+Lakeview University, Hyderabad   2023 – Expected 2027
+B.Tech in Computer Science & Engineering – CGPA: 8.9/10 (Sem 6)
+Sunrise Junior College, Hyderabad   2021 – 2023
+XII – MPC – 95.2%
+Technical Skills
+• Frontend: HTML, CSS, JavaScript, TypeScript, React, Next.js, Tailwind CSS
+• Backend & APIs: Node.js, Express, REST APIs, JWT Authentication, Zod
+• Databases: MongoDB, Mongoose
+• Deployment: Vercel, Netlify
+• Testing & Tooling: Vitest, Supertest, Git, GitHub
+Projects
+Campus Bus Tracker | Next.js · TypeScript · Express · MongoDB   2026
+github.com/priya-nair-example/bus-tracker
+• Live map of 18 college buses used by 1,100 students; location updates every 5 seconds over WebSockets.
+• Express REST API with JWT authentication and Zod validation; 92 Vitest/Supertest tests.
+• Stored driver documents in an AWS S3 bucket with pre-signed upload links.
+Club Event Portal | React · Node.js · MongoDB   2025
+github.com/priya-nair-example/event-portal
+• Handles registrations for 14 events and 2,300 sign-ups with QR-code check-in.
+• Cut check-in queues from 20 minutes to under 4 minutes at the annual tech fest.
+Recipe Finder | Next.js · Tailwind CSS   2024
+github.com/priya-nair-example/recipe-finder
+• Search over 5,000 recipes with filters; Lighthouse performance score of 98.
+Achievements and Positions of Responsibility
+• Tech Lead – Web Development Club, mentoring 40 juniors (Aug 2024 – Present)
+• Runner-up – Lakeview Webathon, 24-hour build (2025)
+Certifications
+• Meta Front-End Developer | MongoDB Associate Developer

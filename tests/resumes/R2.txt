@@ -1,13 +1,27 @@
 Rohit Varma
-rohit.varma@example.com  |  +91 90000 00002  |  Bengaluru
-PROFILE
-DevOps-minded developer, 2 years in industry.
-WORK EXPERIENCE
-Software Developer, Bluepeak Labs   Aug 2023 - Aug 2025
-- Wrote Python3 scripts and JS dashboards for internal tooling.
-- Deployed services on Amazon Web Services using docker-compose.
-- Administered Ubuntu and RHEL servers; tuned PL/SQL queries.
-TECHNICAL SKILLS
-Python3, JS, Amazon Web Services, docker-compose, Ubuntu, RHEL, PL/SQL
-EDUCATION
-Diploma in Computer Engineering, City Polytechnic   2020 - 2023
+Diploma in Computer Engineering · Software Developer
+rohit.varma@example.com | +91 90000 00002 | github.com/rohit-varma-example
+Summary
+• Developer with 2 years of industry experience on cloud-hosted back ends and data pipelines.
+Education
+City Polytechnic, Bengaluru   2020 – 2023
+Diploma in Computer Engineering – 82%
+Technical Skills
+• Languages: Python3, PL/SQL, Shell scripting
+• Cloud & Infrastructure: Amazon Web Services (EC2, RDS), docker-compose, Ubuntu / RHEL servers
+• Backend & APIs: Flask, REST services, Celery
+• Testing & Tooling: py.test, GitLab, Jira
+Experience
+Software Developer – Bluepeak Labs, Bengaluru   Aug 2023 – Aug 2025
+• Built Python3 ETL jobs that load 2 million rows a night into Oracle with PL/SQL procedures.
+• Packaged 9 services with docker-compose and ran them on Ubuntu and RHEL servers on Amazon Web Services.
+• Cut the nightly batch window from 4 hours to 70 minutes by parallelising the slowest stages.
+Projects
+Stock Alert Service | Python3 · Flask · Celery   2024
+github.com/rohit-varma-example/stock-alerts
+• Sends price alerts to 500 subscribers with a median delay of 4 seconds.
+Shift Planner | Flask · Oracle · PL/SQL   2023
+github.com/rohit-varma-example/shift-planner
+• Schedules 120 warehouse staff a week and removed 6 hours of manual planning.
+Certifications
+• Red Hat System Administration I | Oracle Database SQL Certified Associate

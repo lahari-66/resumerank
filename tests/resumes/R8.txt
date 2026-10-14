@@ -1,0 +1,32 @@
+Karthik Iyer
+B.Tech Computer Science & Engineering · Software Engineer
+karthik.iyer@example.com | +91 90000 00008 | linkedin.com/in/karthik-iyer-example | github.com/karthik-iyer-example
+Education
+Northfield Institute of Technology, Bengaluru   2021 – 2025
+B.Tech in Computer Science & Engineering – CGPA: 9.1/10
+Technical Skills
+• Languages: Python, Java, SQL, TypeScript
+• Cloud & Infrastructure: AWS (Lambda, API Gateway, DynamoDB, S3, Cognito), Docker
+• Backend & APIs: FastAPI, REST APIs, GraphQL
+• Testing & Tooling: pytest, GitHub Actions, Postman
+Experience
+Software Engineering Intern – Acme Fintech, Bengaluru   Jun 2025 – Jun 2026
+• Built 6 FastAPI endpoints for loan pre-approval serving 40,000 requests a day at p95 120 ms.
+• Moved 3 cron jobs to AWS Lambda with DynamoDB, cutting the monthly bill by 35%.
+• Raised test coverage from 48% to 86% with pytest and enforced it in GitHub Actions.
+Projects
+Expense Splitter API | Python · FastAPI · PostgreSQL · Docker   2025
+github.com/karthik-iyer-example/expense-splitter
+• Splits shared expenses for 600 users; 140 pytest tests and a Docker image under 90 MB.
+Serverless URL Shortener | AWS Lambda · API Gateway · DynamoDB   2024
+github.com/karthik-iyer-example/short-links
+• Handles 1 million redirects a month inside the AWS free tier with Cognito-protected admin APIs.
+Exam Seat Planner | Java · SQL   2023
+github.com/karthik-iyer-example/seat-planner
+• Allocates 2,400 students to 60 rooms in 3 seconds with no clashes.
+Achievements and Positions of Responsibility
+• Winner – Smart India Hackathon, fintech track (2024)
+• Winner – Northfield 36-hour Hackathon, 80 teams (2023)
+• Coordinator – Coding Club contest series, 12 contests (2023)
+Certifications
+• AWS Certified Developer – Associate

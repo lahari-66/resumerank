@@ -1,12 +1,20 @@
 Imran Shaik
-imran.shaik@example.com  |  +91 90000 00004  |  Vijayawada
-OBJECTIVE
-Junior developer looking for a cloud internship.
-EXPERIENCE
-Junior Developer, Greenfield Retail   Jan 2025 - Jan 2026
-- Wrote Python scripts to clean sales data.
-- Built SQL queries for weekly reports.
-SKILLS
-Python, SQL, Microsoft Excel, Communication
-EDUCATION
-Higher Secondary Certificate (Class 12), State Board   2020 - 2022
+Junior Data Analyst
+imran.shaik@example.com | +91 90000 00004 | linkedin.com/in/imran-shaik-example
+Summary
+• Data analyst with 1 year of experience turning sales data into weekly reports.
+Education
+Greenfield Junior College, Vijayawada   2020 – 2022
+Higher Secondary Certificate (Class XII), MPC – 91%
+Technical Skills
+• Languages: Python, SQL
+• Data & Reporting: Pandas, Microsoft Excel, Power BI
+• Soft skills: Communication, Teamwork
+Experience
+Junior Data Analyst – Greenfield Retail, Vijayawada   Jan 2025 – Jan 2026
+• Wrote Python scripts that clean 50,000 sales rows a week.
+• Built 14 SQL queries behind the weekly management dashboard in Power BI.
+Projects
+Retail Sales Dashboard | Power BI · Excel   2025
+github.com/imran-shaik-example/sales-dashboard
+• Tracks 3 stores and 1,200 products; used every Monday by the store managers.

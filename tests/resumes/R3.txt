@@ -1,13 +1,19 @@
 Kavya Menon
-kavya.menon@example.com  |  +91 90000 00003  |  Chennai
-SUMMARY
-Cloud engineer with 3 years of experience on AWS.
-EXPERIENCE
-Cloud Engineer, Harbourline Systems   Jun 2022 - May 2025
-- Automated AWS infrastructure with Python and Bash.
-- Packaged applications with Docker on Linux servers.
-- Maintained SQL schemas and backups.
-SKILLS
-Python, AWS, Docker, Linux, SQL
-EDUCATION
-B.Tech in Information Technology, Lakeside College of Engineering   2018 - 2022
+B.Tech Information Technology · Cloud Engineer
+kavya.menon@example.com | +91 90000 00003 | github.com/kavya-menon-example
+Summary
+• Cloud engineer with 3 years of experience automating AWS infrastructure.
+Education
+Lakeside College of Engineering, Chennai   2018 – 2022
+B.Tech in Information Technology – CGPA: 8.1/10
+Technical Skills
+• Languages: Python, SQL
+• Cloud & Infrastructure: AWS, Docker, Linux
+• Testing & Tooling: pytest, Git
+Experience
+Cloud Engineer – Harbourline Systems, Chennai   Jun 2022 – May 2025
+• Automated AWS infrastructure for 12 teams with Python and Bash.
+• Packaged 15 applications with Docker on Linux servers.
+• Maintained SQL schemas and nightly backups for 4 databases.
+Certifications
+• AWS Certified Cloud Practitioner

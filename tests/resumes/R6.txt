@@ -1,18 +1,30 @@
 Arjun Reddy
-arjun.reddy@example.com  |  +91 90000 00006  |  Warangal
-SUMMARY
-Cloud engineer with 3 years of experience. Technical skills are listed on page 2.
-EXPERIENCE
-Cloud Engineer, Silverline Tech   Aug 2022 - Jul 2025
-- Owned build pipelines and on-call rotation for a payments team.
-- Reduced deployment time from 40 minutes to 8 minutes.
-- Mentored two interns.
-EDUCATION
-B.Tech in Computer Science, Eastgate Institute of Technology   2018 - 2022
-SKILLS
-Languages: Python, SQL
-Cloud: AWS (EC2, S3, Lambda, DynamoDB)
-Platforms: Docker, Linux
-PROJECTS
-Serverless file converter on AWS Lambda   Jan 2024 - Mar 2024
-Container monitoring dashboard with Docker and Grafana   Sep 2024 - Nov 2024
+B.Tech Computer Science & Engineering · Cloud Engineer
+arjun.reddy@example.com | +91 90000 00006 | github.com/arjun-reddy-example
+Summary
+• Engineer with 3 years of experience running payment infrastructure. Technical skills are listed on page 2.
+Education
+Eastgate Institute of Technology, Warangal   2018 – 2022
+B.Tech in Computer Science & Engineering – CGPA: 8.0/10
+Experience
+Cloud Engineer – Silverline Tech, Hyderabad   Aug 2022 – Jul 2025
+• Owned build pipelines and the on-call rotation for a payments team of 14 engineers.
+• Reduced deployment time from 40 minutes to 8 minutes across 30 services.
+• Mentored 2 interns and wrote the team's incident-review handbook.
+• Led the migration of 3 batch jobs to an event-driven design, saving 18% in compute.
+Achievements and Positions of Responsibility
+• Spot award for incident leadership during a 2023 payments outage (2023)
+• Organiser – Eastgate Tech Fest, 1,500 participants (2021)
+Technical Skills
+• Languages: Python, SQL
+• Cloud & Infrastructure: AWS (EC2, S3, Lambda, DynamoDB), Docker, Linux
+• Testing & Tooling: pytest, Git, Jenkins
+Projects
+Serverless File Converter | AWS Lambda · S3 · Python   2024
+github.com/arjun-reddy-example/file-converter
+• Converts 2,000 documents a day; p95 latency 1.8 seconds.
+Container Monitoring Dashboard | Docker · Grafana · Linux   2024
+github.com/arjun-reddy-example/container-monitor
+• Tracks 40 containers and pages the on-call engineer within 1 minute of a crash.
+Certifications
+• AWS Certified SysOps Administrator – Associate

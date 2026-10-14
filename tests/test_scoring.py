@@ -130,18 +130,128 @@ class Education(unittest.TestCase):
             self.assertFalse(scoring.has_degree(text), text)
 
 
+class SectionAwareExperience(unittest.TestCase):
+    """Only work sections count as years; project and club-role dates earn the fresher credit only."""
+
+    FRESHER = """Asha K
+    B.Tech CSE · 2023 – 2027
+    Education
+    Lakeview University 2023 – Expected 2027
+    Sunrise Junior College 2021 – 2023
+    Projects
+    Bus Tracker | Next.js · Express GitHub 2026
+    Achievements and Positions of Responsibility
+    • Head – Coding Club (Jan 2025 – Present)
+    """
+
+    def test_club_role_and_projects_are_not_work_years(self):
+        years, has_dates = scoring.estimate_experience(self.FRESHER, now=NOW)
+        self.assertEqual(years, 0)
+        self.assertTrue(has_dates)
+
+    def test_fresher_credit_when_min_years_is_zero(self):
+        self.assertEqual(score(self.FRESHER, min_years=0)["expScore"], 20)
+        self.assertEqual(score(self.FRESHER, min_years=2)["expScore"], 0)
+
+    def test_no_dates_no_fresher_credit(self):
+        self.assertEqual(score("Asha K\nSkills\nPython, SQL", min_years=0)["expScore"], 0)
+
+    def test_education_ranges_never_count(self):
+        text = "Education\nB.Tech, Riverside 2015 – 2019\nM.Tech, Riverside 2019 – 2021\nSkills\nPython"
+        self.assertEqual(scoring.estimate_experience(text, now=NOW), (0, False))
+
+    def test_work_section_after_projects_counts(self):
+        text = "Projects\nTracker 2022 – 2024\nExperience\nIntern, Acme   Jun 2025 – Jun 2026"
+        self.assertEqual(scoring.estimate_experience(text, now=NOW)[0], 1.0)
+
+    def test_heading_variants(self):
+        for heading in ("WORK EXPERIENCE", "Internships", "Achievements & Positions of Responsibility"):
+            self.assertIsNotNone(scoring._heading_of(heading), heading)
+
+
+class RealCvSkills(unittest.TestCase):
+    def test_skills_inside_parentheses(self):
+        found = scoring.find_skills("Cloud: AWS (Lambda, API Gateway, DynamoDB, S3, Cognito), Docker")
+        self.assertTrue({"aws", "lambda", "api gateway", "dynamodb", "s3", "cognito", "docker"} <= found)
+
+    def test_web_stack(self):
+        found = scoring.find_skills(
+            "Next.js · TypeScript · Express · MongoDB · Razorpay; JWT Authentication, Zod, bcrypt; "
+            "Vitest/Supertest tests; deployed on Vercel with Supabase and AWS Amplify; Tailwind CSS, React")
+        for skill in ("next.js", "typescript", "express", "mongodb", "razorpay", "jwt", "zod", "bcrypt", "vitest",
+                      "supertest", "vercel", "supabase", "amplify", "tailwind", "react"):
+            self.assertIn(skill, found)
+
+    def test_ml_stack(self):
+        found = scoring.find_skills(
+            "PyTorch, TensorFlow/Keras, scikit-learn, Pandas, NumPy, OpenCV, LoRA; FastAPI, Streamlit; "
+            "PySpark, Kafka, Spark Structured Streaming, MLlib; WebRTC, Twilio, Gemini 2.0 Flash; pytest, GitHub Actions")
+        for skill in ("pytorch", "tensorflow", "keras", "scikit-learn", "pandas", "numpy", "opencv", "lora", "fastapi",
+                      "streamlit", "pyspark", "spark", "kafka", "mllib", "webrtc", "twilio", "gemini", "pytest",
+                      "github actions"):
+            self.assertIn(skill, found)
+
+    def test_postgresql_is_not_sql(self):
+        self.assertNotIn("sql", scoring.find_skills("Databases: PostgreSQL, MongoDB"))
+
+    def test_common_words_do_not_match(self):
+        self.assertNotIn("next.js", scoring.find_skills("Next steps: build the next release"))
+
+
 class TestResumes(unittest.TestCase):
-    """Expected bands from docs/test_matrix.md, scored on the source text (no OCR)."""
+    """Expected scores and bands from docs/test_matrix.md, scored on the source text (no OCR)."""
 
-    BANDS = {"R1": (90, 100), "R2": (85, 95), "R3": (85, 100), "R4": (40, 55), "R5": (30, 40), "R6": (90, 100)}
+    EXPECTED = {   # id: (exact expected score, band low, band high, matched skills)
+        "R1": (100, 90, 100, {"python", "aws", "docker", "linux", "sql"}),
+        "R2": (90, 85, 95, {"python", "aws", "docker", "linux", "sql"}),
+        "R3": (100, 85, 100, {"python", "aws", "docker", "linux", "sql"}),
+        "R4": (44, 40, 55, {"python", "sql"}),
+        "R5": (40, 30, 40, set()),
+        "R6": (100, 95, 100, {"python", "aws", "docker", "linux", "sql"}),
+        "R7": (32, 25, 40, {"aws"}),
+        "R8": (78, 70, 85, {"python", "aws", "docker", "sql"}),
+    }
 
-    def test_bands(self):
-        scores = {}
-        for rid, (lo, hi) in self.BANDS.items():
-            with open(os.path.join(RESUMES, f"{rid}.txt"), encoding="utf-8") as f:
-                scores[rid] = score(f.read())["score"]
-            self.assertTrue(lo <= scores[rid] <= hi, f"{rid} scored {scores[rid]}, expected {lo}-{hi}")
-        self.assertLessEqual(abs(scores["R6"] - scores["R1"]), 5)
+    def read(self, rid):
+        with open(os.path.join(RESUMES, f"{rid}.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_expected_scores_and_bands(self):
+        for rid, (expected, lo, hi, matched) in self.EXPECTED.items():
+            with self.subTest(rid):
+                r = score(self.read(rid))
+                self.assertEqual(r["score"], expected)
+                self.assertTrue(lo <= r["score"] <= hi)
+                self.assertEqual(set(r["matchedSkills"]), matched)
+
+    def test_r6_matches_r1(self):
+        self.assertLessEqual(abs(score(self.read("R6"))["score"] - score(self.read("R1"))["score"]), 5)
+
+    def test_r2_uses_aliases_only(self):
+        lowered = self.read("R2").lower()
+        for bare in ("python ", "python,", " aws", "docker ", "linux"):
+            self.assertNotIn(bare, lowered)
+
+    def test_r7_fresher_and_r8_internship(self):
+        self.assertEqual(score(self.read("R7"))["yearsExperience"], 0)
+        self.assertEqual(score(self.read("R7"), min_years=0)["expScore"], 20)
+        self.assertEqual(score(self.read("R8"))["yearsExperience"], 1.0)
+
+    def test_pdf_text_layer_scores_like_source(self):
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("pypdf not installed")
+        for rid in self.EXPECTED:
+            with self.subTest(rid):
+                reader = pypdf.PdfReader(os.path.join(RESUMES, f"{rid}.pdf"))
+                text = "\n".join(p.extract_text() or "" for p in reader.pages)
+                if rid == "R3":
+                    self.assertEqual(text.strip(), "")   # image-only scan
+                    continue
+                self.assertEqual(score(text)["score"], self.EXPECTED[rid][0])
+                if rid == "R6":
+                    self.assertEqual(len(reader.pages), 2)
 
 
 if __name__ == "__main__":

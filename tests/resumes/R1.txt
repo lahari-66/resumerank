@@ -1,15 +1,36 @@
 Ananya Rao
-ananya.rao@example.com  |  +91 90000 00001  |  Hyderabad
-SUMMARY
-Cloud engineer with 3 years of experience building and running services on AWS.
-EXPERIENCE
-Cloud Engineer, Northwind Software Pvt Ltd   Jul 2022 - Jun 2025
-- Built Python automation for AWS EC2, S3 and Lambda deployments.
-- Containerised six services with Docker and ran them on Linux hosts.
-- Wrote SQL reports on a MySQL database for the operations team.
-SKILLS
-Python, AWS, Docker, Linux, SQL, Git, Bash, REST APIs
-EDUCATION
-B.Tech in Computer Science, Riverside Institute of Technology   2018 - 2022
-CERTIFICATIONS
-AWS Certified Cloud Practitioner
+B.Tech Computer Science & Engineering · Cloud Engineer
+ananya.rao@example.com | +91 90000 00001 | linkedin.com/in/ananya-rao-example | github.com/ananya-rao-example
+Summary
+• Cloud engineer with 3 years of experience building, deploying and running Python services on AWS.
+Education
+Riverside Institute of Technology, Hyderabad   2018 – 2022
+B.Tech in Computer Science & Engineering – CGPA: 8.4/10
+Technical Skills
+• Languages: Python, SQL, Bash
+• Cloud & Infrastructure: AWS (EC2, S3, Lambda, CloudWatch, IAM), Docker, Linux (Ubuntu), Terraform
+• Backend & APIs: FastAPI, REST APIs
+• Databases: MySQL, PostgreSQL, DynamoDB
+• Testing & Tooling: pytest, Git, GitHub Actions
+Experience
+Cloud Engineer – Northwind Software Pvt Ltd, Hyderabad   Jul 2022 – Jun 2025
+• Automated provisioning of 40+ EC2 and Lambda environments with Python and Terraform, cutting setup time from 2 days to 3 hours.
+• Containerised 6 legacy services with Docker on Linux hosts and moved them behind an AWS load balancer with zero downtime.
+• Wrote SQL reports on a 120 GB MySQL warehouse used weekly by the operations team.
+Projects
+Serverless Invoice Parser | Python · AWS Lambda · S3 · DynamoDB   2024
+github.com/ananya-rao-example/invoice-parser
+• Event-driven pipeline that parses 1,000+ PDF invoices a day for under $1 a month.
+• Reached 98% field accuracy on a 300-invoice test set; 64 pytest tests in CI.
+Container Health Dashboard | Docker · Prometheus · Grafana   2023
+github.com/ananya-rao-example/container-health
+• Monitors 25 containers and alerts within 30 seconds of a failed health check.
+• Reduced mean time to recovery from 22 to 6 minutes on the team's staging cluster.
+Log Search CLI | Python · SQLite   2022
+github.com/ananya-rao-example/log-search
+• Indexes 5 million log lines and answers keyword queries in under 200 ms.
+Achievements and Positions of Responsibility
+• Winner – Riverside Cloud Hackathon, built a cost-alerting bot (2021)
+• Lead – Cloud Computing Club, ran 8 hands-on AWS workshops for 300+ students (2020 – 2021)
+Certifications
+• AWS Certified Cloud Practitioner | AWS Certified Developer – Associate
