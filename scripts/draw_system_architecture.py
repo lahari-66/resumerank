@@ -1,11 +1,11 @@
-"""Draw the ResumeRank *system* architecture: the layers of the system and what lives in each.
+"""Draw the ResumeRank *system* architecture: a simple layered view of the system.
 
     python scripts/draw_system_architecture.py
 
 Writes docs/system-architecture.drawio (editable in app.diagrams.net, official AWS icons) and
 docs/system-architecture.png (rendered with the same headless-browser helper as
 draw_architecture.py). docs/architecture.png shows the numbered request and event flow; this
-diagram shows the layered structure and the responsibilities inside each layer.
+diagram shows the layers of the system at a glance.
 """
 
 import os
@@ -16,85 +16,56 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import draw_architecture as base  # noqa: E402  (reuses its PNG renderer and colours)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-W, H = 1700, 1180
+W, H = 1500, 920
 ICON = 64
+LANE = 88            # x of the arrow lane between the layer names and the icons
 
-# layer bands, drawn as swimlanes with the name in a vertical strip: (name, y, height, header, body)
+# layers, drawn as swimlanes with the name in a vertical strip: (name, y, height, header, body)
 LAYERS = [
     ("Users", 20, 120, "#E3E8EF", "#F7F9FB"),
-    ("Presentation", 155, 150, "#F6D3DA", "#FDF4F6"),
-    ("Application (API)", 320, 250, "#E3D7FB", "#F8F4FF"),
-    ("Processing", 585, 230, "#FBDDBD", "#FFF8F0"),
-    ("Data", 830, 160, "#EBD3F2", "#FBF5FD"),
-    ("Cross-cutting", 1005, 155, "#CFE4F2", "#F2F8FC"),
+    ("Frontend", 155, 135, "#F6D3DA", "#FDF4F6"),
+    ("Backend API", 305, 135, "#E3D7FB", "#F8F4FF"),
+    ("Processing", 455, 135, "#FBDDBD", "#FFF8F0"),
+    ("Storage", 605, 135, "#EBD3F2", "#FBF5FD"),
+    ("Support", 755, 145, "#CFE4F2", "#F2F8FC"),
 ]
 
-# AWS icons: id: (x, y, label, colour key, resIcon, label side "right" | "top" | "none")
+# AWS icons: id: (x, y, label, colour key, resIcon); labels sit below the icon
 ICONS = {
-    "amplify": (100, 198, "<b>AWS Amplify Hosting</b><br>website over HTTPS", "frontend", "amplify", "right"),
-    "apigw":   (100, 345, "<b>Amazon API Gateway</b><br>HTTP API · CORS · throttling", "network", "api_gateway", "right"),
-    "api":     (100, 470, "<b>AWS Lambda</b><br>api_handler", "compute", "lambda", "right"),
-    "s3in":    (360, 690, "<b>Amazon S3</b><br>browser PUT (pre-signed)", "storage", "s3", "top"),
-    "sqs":     (570, 690, "<b>Amazon SQS</b><br>queue + dead-letter queue", "integration", "sqs", "top"),
-    "proc":    (780, 690, "<b>AWS Lambda</b><br>process_resume", "compute", "lambda", "top"),
-    "ddb":     (100, 873, "<b>Amazon DynamoDB</b><br>on-demand", "database", "dynamodb", "right"),
-    "s3data":  (1290, 878, "", "storage", "s3", "none"),
-    "sns":     (100, 1050, "<b>Amazon SNS</b><br>score alerts · emailed shortlist", "integration", "sns", "right"),
-    "cw":      (420, 1050, "<b>Amazon CloudWatch</b><br>logs · CandidateScore metric<br>dashboard · zero-spend budget", "management", "cloudwatch_2", "right"),
-    "iam":     (760, 1050, "<b>AWS IAM</b><br>two least-privilege roles<br>private bucket · recruiter key", "security", "identity_and_access_management", "right"),
-    "textract": (1090, 1050, "<b>Amazon Textract</b><br>OCR (pypdf fallback<br>on the Free plan)", "ml", "textract", "right"),
-    "comp":    (1390, 1050, "<b>Amazon Comprehend</b><br>key phrases · entities<br>(when available)", "ml", "comprehend", "right"),
+    "amplify":  (110, 172, "AWS Amplify", "frontend", "amplify"),
+    "apigw":    (110, 322, "API Gateway", "network", "api_gateway"),
+    "api":      (330, 322, "Lambda<br>api_handler", "compute", "lambda"),
+    "s3in":     (110, 472, "Amazon S3", "storage", "s3"),
+    "sqs":      (330, 472, "Amazon SQS", "integration", "sqs"),
+    "proc":     (550, 472, "Lambda<br>process_resume", "compute", "lambda"),
+    "ddb":      (110, 622, "DynamoDB", "database", "dynamodb"),
+    "s3data":   (330, 622, "Amazon S3", "storage", "s3"),
+    "sns":      (110, 772, "Amazon SNS", "integration", "sns"),
+    "cw":       (330, 772, "CloudWatch", "management", "cloudwatch_2"),
+    "iam":      (550, 772, "IAM", "security", "identity_and_access_management"),
+    "textract": (770, 772, "Textract", "ml", "textract"),
+    "comp":     (990, 772, "Comprehend", "ml", "comprehend"),
 }
-PEOPLE = {
-    "cand": (330, 38, "Candidate"),
-    "rec":  (530, 38, "Recruiter"),
-}
+PEOPLE = {"cand": (110, 40, "Candidate"), "rec": (330, 40, "Recruiter")}
 
-# responsibility boxes: (x, y, w, h, title, detail)
-BOXES = [
-    # presentation
-    (360, 175, 315, 110, "Home · Apply", "open jobs · QR / shared link · drag-and-drop PDF upload · phone layout"),
-    (685, 175, 315, 110, "Track application", "live status · weighted breakdown · skill advice · re-upload a failed PDF"),
-    (1010, 175, 315, 110, "Recruiter dashboard", "insights · leaderboard · charts · blind screening · compare · notes · CSV"),
-    (1335, 175, 325, 110, "Shared app.js · styles.css", "API client · recruiter key · dark mode · text-only rendering"),
-    # application
-    (360, 340, 315, 100, "Jobs", "create · list · close / reopen · deadline · alert threshold"),
-    (685, 340, 315, 100, "Uploads", "pre-signed PUT · re-upload for FAILED · duplicate (SUPERSEDED) check"),
-    (1010, 340, 315, 100, "Candidates", "ranked leaderboard (ScoreIndex) · status · resume view"),
-    (1335, 340, 325, 100, "Decisions", "shortlist / reject · private notes"),
-    (360, 452, 315, 100, "Skill extraction", "184-skill dictionary applied to a job description"),
-    (685, 452, 315, 100, "Shortlist email", "ranked shortlist with notes → SNS"),
-    (1010, 452, 650, 100, "Validation & access", "recruiter key (x-recruiter-key) · PDF only, ≤ 5 MB · CORS to the site · 20 req/s, burst 50"),
-    # processing
-    (950, 603, 230, 95, "Text extraction", "Textract OCR, or the PDF text layer (pypdf)"),
-    (1190, 603, 230, 95, "NLP enrichment", "Comprehend key phrases & entities"),
-    (1430, 603, 230, 95, "Scoring engine", "per-job weights · section-aware experience · preferred bonus"),
-    (950, 708, 230, 95, "Persistence", "conditional UpdateItem: SCORED / FAILED, never over SUPERSEDED"),
-    (1190, 708, 230, 95, "Alerts & metrics", "SNS at the job's threshold · CandidateScore metric"),
-    (1430, 708, 230, 95, "Reliability", "partial batch failures · 3 retries · DLQ · max 5 copies"),
-    # data
-    (360, 850, 420, 120, "Jobs table", "jobId · title · required & preferred skills · weights · minYears · deadline · status · alert threshold"),
-    (795, 850, 460, 120, "Candidates table + ScoreIndex GSI", "jobId + candidateId · status · score, components, bonus · skills · decision · note · full text"),
-    (1370, 850, 290, 120, "Resumes bucket (S3)", "resumes/{jobId}/{candidateId}.pdf · private · pre-signed URLs only · 7-day lifecycle"),
+# one plain-language summary per layer: (x, y, w, h, title, detail)
+SUMMARIES = [
+    (820, 180, 640, 80, "Website (HTTPS)", "Home · Apply · Track application · Recruiter dashboard"),
+    (820, 330, 640, 80, "REST API", "jobs · uploads · ranked candidates · shortlist & notes"),
+    (820, 480, 640, 80, "Resume pipeline", "read the PDF → find skills → score 0–100 → save → alert"),
+    (820, 630, 640, 80, "Data", "jobs and candidates (DynamoDB) · resume PDFs (private S3)"),
+    (1210, 780, 250, 80, "Shared services", "email alerts · monitoring · security · AI"),
 ]
 
-# arrows: (source, target, exit, entry, waypoints, label)
+# arrows: (source, target, exit, entry, waypoints, label, dashed)
 EDGES = [
-    ("cand", "amplify", (0.5, 1), (0.5, 0), [(362, 147), (132, 147)], ""),
-    ("rec", "amplify", (0.5, 1), (0.5, 0), [(562, 147), (132, 147)], ""),
-    ("amplify", "apigw", (0.5, 1), (0.5, 0), [], "HTTPS + CORS"),
-    ("apigw", "api", (0.5, 1), (0.5, 0), [], ""),
-    ("api", "ddb", (0.25, 1), (0.25, 0), [], "read / write"),
-    ("s3in", "sqs", (1, 0.5), (0, 0.5), [], ""),
-    ("sqs", "proc", (1, 0.5), (0, 0.5), [], ""),
-    ("proc", "ddb", (0.5, 1), (0.75, 0), [(812, 822), (148, 822)], "score / FAILED"),
+    ("cand", "amplify", (0, 0.5), (0, 0.3), [(LANE, 72), (LANE, 191)], "", False),
+    ("amplify", "apigw", (0, 0.8), (0, 0.5), [(LANE, 223), (LANE, 354)], "", False),
+    ("apigw", "api", (1, 0.5), (0, 0.5), [], "", False),
+    ("amplify", "s3in", (0, 0.8), (0, 0.5), [(LANE, 223), (LANE, 504)], "upload", True),
+    ("s3in", "sqs", (1, 0.5), (0, 0.5), [], "", False),
+    ("sqs", "proc", (1, 0.5), (0, 0.5), [], "", False),
 ]
-
-LABEL_STYLE = {
-    "right": "labelPosition=right;verticalLabelPosition=middle;align=left;verticalAlign=middle;spacingLeft=6;",
-    "top": "labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;",
-    "none": "",
-}
 
 
 def build_xml():
@@ -112,16 +83,16 @@ def build_xml():
             f'fontColor=#232F3E;rounded=1;arcSize=2;" vertex="1" parent="1">'
             f'<mxGeometry x="20" y="{y}" width="{W - 40}" height="{h}" as="geometry"/></mxCell>')
 
-    for x, y, w, h, title, detail in BOXES:
-        label = f"<b>{escape(title)}</b><br><font style='font-size:11px' color='#545B64'>{escape(detail)}</font>"
-        add(f'<mxCell id="{{id}}" value="{escape(label)}" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;'
-            f'strokeColor=#8C9BAF;fontSize=13;fontColor=#232F3E;spacing=6;" vertex="1" parent="1">'
+    for x, y, w, h, title, detail in SUMMARIES:
+        label = f"<b>{escape(title)}</b><br><font style='font-size:13px' color='#545B64'>{escape(detail)}</font>"
+        add(f'<mxCell id="{{id}}" value="{escape(label)}" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;'
+            f'strokeColor=#8C9BAF;fontSize=15;fontColor=#232F3E;spacing=6;" vertex="1" parent="1">'
             f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
 
     ids = {}
-    for key, (x, y, label, cat, icon, side) in ICONS.items():
+    for key, (x, y, label, cat, icon) in ICONS.items():
         style = (f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={base.COLOUR[cat]};strokeColor=#ffffff;"
-                 f"dashed=0;html=1;fontSize=12;aspect=fixed;whiteSpace=nowrap;{LABEL_STYLE[side]}"
+                 f"dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=13;aspect=fixed;"
                  f"shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.{icon};")
         ids[key] = add(f'<mxCell id="{{id}}" value="{escape(label)}" style="{style}" vertex="1" parent="1">'
                        f'<mxGeometry x="{x}" y="{y}" width="{ICON}" height="{ICON}" as="geometry"/></mxCell>')
@@ -132,10 +103,11 @@ def build_xml():
         ids[key] = add(f'<mxCell id="{{id}}" value="{escape(label)}" style="{style}" vertex="1" parent="1">'
                        f'<mxGeometry x="{x}" y="{y}" width="64" height="64" as="geometry"/></mxCell>')
 
-    for src, dst, (ex, ey), (nx, ny), pts, label in EDGES:
+    for src, dst, (ex, ey), (nx, ny), pts, label, dashed in EDGES:
         style = (f"edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;endSize=8;strokeWidth=2;"
-                 f"strokeColor=#232F3E;fontSize=11;fontColor=#232F3E;labelBackgroundColor=#ffffff;"
-                 f"exitX={ex};exitY={ey};exitDx=0;exitDy=0;entryX={nx};entryY={ny};entryDx=0;entryDy=0;")
+                 f"strokeColor=#232F3E;fontSize=12;fontColor=#232F3E;labelBackgroundColor=#ffffff;"
+                 f"exitX={ex};exitY={ey};exitDx=0;exitDy=0;entryX={nx};entryY={ny};entryDx=0;entryDy=0;"
+                 f"{'dashed=1;' if dashed else ''}")
         points = "".join(f'<mxPoint x="{px}" y="{py}"/>' for px, py in pts)
         geo = (f'<mxGeometry relative="1" as="geometry"><Array as="points">{points}</Array></mxGeometry>'
                if pts else '<mxGeometry relative="1" as="geometry"/>')
@@ -143,10 +115,10 @@ def build_xml():
             f'source="{ids[src]}" target="{ids[dst]}">{geo}</mxCell>')
 
     add('<mxCell id="{id}" value="&lt;b&gt;ResumeRank – system architecture&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:13px&quot; '
-        'color=&quot;#545B64&quot;&gt;AWS ap-south-1 · fully serverless · Rs. 0 on the AWS Free Tier&lt;/font&gt;" '
+        'color=&quot;#545B64&quot;&gt;fully serverless on AWS · ap-south-1 · Rs. 0 on the Free Tier&lt;/font&gt;" '
         'style="text;html=1;fontSize=19;fontColor=#232F3E;align=right;verticalAlign=middle;" vertex="1" parent="1">'
-        '<mxGeometry x="900" y="45" width="760" height="56" as="geometry"/></mxCell>')
-    return ('<mxGraphModel dx="1700" dy="1180" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" '
+        f'<mxGeometry x="760" y="50" width="{W - 800}" height="56" as="geometry"/></mxCell>')
+    return ('<mxGraphModel dx="1500" dy="920" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" '
             f'fold="1" page="1" pageScale="1" pageWidth="{W}" pageHeight="{H}" math="0" shadow="0">'
             '<root><mxCell id="0"/><mxCell id="1" parent="0"/>' + "".join(cells) + "</root></mxGraphModel>")
 
