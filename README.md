@@ -5,8 +5,8 @@ upload PDF resumes, and every resume is read, scored 0–100 against the job's r
 on a live dashboard within seconds. Uploads are buffered in **SQS** and processed by an auto-scaling
 **Lambda** that extracts the text (**Amazon Textract** OCR where the account allows it, otherwise the
 PDF text layer), analyses it (**Amazon Comprehend** where available), stores the result in
-**DynamoDB** and emails the recruiter through **SNS** when the score is 75 or more. Everything runs
-inside the AWS Free Tier with no server to manage.
+**DynamoDB** and emails the recruiter through **SNS** when the score reaches the job's alert threshold
+(75 by default). Everything runs inside the AWS Free Tier with no server to manage.
 
 > Course project. The score orders resumes for human review; it does not measure ability and
 > must never be used to reject a candidate automatically. All test resumes are fictional.
@@ -15,14 +15,18 @@ inside the AWS Free Tier with no server to manage.
 
 | For | Feature |
 | --- | --- |
-| Everyone | **Home page** with live counts, open positions, how-it-works and architecture |
-| Candidates | **Apply** to any open job (job list + drag-and-drop PDF upload through a 5-minute pre-signed URL) |
-| Candidates | **Track application** page: live status, score ring, breakdown, matched / missing skills and advice |
-| Recruiters | **Access-key protected dashboard**: all jobs, stat cards, score-distribution and skill-gap charts |
-| Recruiters | **Job-description skill extraction** (153-skill dictionary with aliases) when posting a job |
-| Recruiters | Ranked, auto-refreshing **leaderboard** with search, status filters and **CSV export** |
-| Recruiters | **Candidate drawer**: score breakdown, OCR preview, **view the resume PDF** (pre-signed GET), **shortlist / reject** |
-| Recruiters | **Bulk upload** of many PDFs at once – each is queued and scored in parallel |
+| Everyone | **Home page** with live counts, open positions, how-it-works and architecture; **dark mode** on every page |
+| Candidates | **Apply** to any open job (job list + drag-and-drop PDF upload through a 5-minute pre-signed URL); phone-friendly layout |
+| Candidates | **Track application**: live status, score ring, weighted breakdown, bonus, matched / missing skills and advice |
+| Candidates | **Re-upload a text-based PDF** when an application FAILED – same reference, rescored automatically |
+| Recruiters | **Access-key protected dashboard** opening on **all-jobs insights** (top 10 skill gaps across every job) |
+| Recruiters | **Post a job**: skill extraction from the description, **preferred skills** (+2 each, max +10), **score weights** (must total 100), **deadline**, **per-job alert threshold** |
+| Recruiters | **Close / reopen** a job; closed or expired jobs disappear from the public site and refuse uploads |
+| Recruiters | Ranked, auto-refreshing **leaderboard**: stat cards, score-distribution and skill-gap charts, **full-text search** over the resumes, filters, **CSV export** |
+| Recruiters | **Blind screening** ("hide names until shortlisted") and **compare two candidates** side by side |
+| Recruiters | **Candidate drawer**: weighted breakdown, extracted text, **view the resume PDF**, **shortlist / reject**, private **notes** |
+| Recruiters | **Email shortlist** to the alert subscribers; **QR code** of the apply link; **bulk upload** of many PDFs |
+| Recruiters | **Duplicate applications**: the same email applying again replaces the earlier application (SUPERSEDED) |
 | Operations | **SQS buffer + dead-letter queue**, Lambda concurrency cap, API Gateway throttling, CloudWatch dashboard, load-test script |
 
 ## Architecture
@@ -39,10 +43,10 @@ Browser ── S3 static website (index, recruiter, upload, status)
                                                      └─> Lambda process_resume  (scales out, max 5 concurrent)
                                                            ├─ Textract OCR  · or PDF text layer (pypdf) on the Free plan
                                                            ├─ Comprehend key phrases / entities (when available)
-                                                           ├─ scoring.py  skills 60 · experience 20 · education 20
-                                                           ├─ DynamoDB UpdateItem → SCORED | FAILED
+                                                           ├─ scoring.py  per-job weights (default 60/20/20) + preferred-skill bonus
+                                                           ├─ DynamoDB UpdateItem → SCORED | FAILED (never over SUPERSEDED)
                                                            ├─ CloudWatch metric ResumeRank/CandidateScore
-                                                           └─ SNS email when score ≥ 75
+                                                           └─ SNS email when score ≥ the job's alert threshold
 ```
 
 The contract between the components (S3 key format, table schemas, API routes, CORS) is in
@@ -60,17 +64,35 @@ The contract between the components (S3 key format, table schemas, API routes, C
 | **Fault tolerance** | Only transient failures are retried (partial batch responses); after 3 receives a message moves to the dead-letter queue instead of being lost or looping. |
 | **Evidence** | `python scripts/load_test.py 40 20` fires 40 uploads 20 at a time; the CloudWatch dashboard shows concurrent executions rising, queue depth spiking and draining, and API 4xx (throttled) counts. |
 
+## API
+
+| Route | Access | Purpose |
+| --- | --- | --- |
+| `GET /jobs` | public / recruiter | open jobs (recruiter key: every job), or one job with `?jobId=` |
+| `POST /upload-url` | public | PENDING candidate + pre-signed PUT; supersedes the same email's earlier application |
+| `POST /reupload-url` | public | new pre-signed PUT to the same key for a FAILED candidate |
+| `GET /status` | public | a candidate's own result |
+| `POST /skills/extract` | public | skills found in a job description |
+| `POST /jobs` | recruiter | create a job (deadline, alert threshold, preferred skills, weights) |
+| `POST /jobs/status` | recruiter | close or reopen a job |
+| `GET /candidates` | recruiter | ranked leaderboard with full text |
+| `POST /decision` | recruiter | shortlist / reject / clear, optional note |
+| `POST /shortlist/send` | recruiter | email the shortlist through SNS |
+| `GET /resume-url` | recruiter | 5-minute pre-signed GET to view a PDF |
+
+Request and response examples are in [INTERFACES.md](INTERFACES.md) §3.
+
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `lambda/process_resume/` | SQS/S3-triggered processor: `lambda_function.py`, `scoring.py`, `skills.json` (153 skills with aliases), `requirements.txt` (pypdf, bundled into the zip) |
-| `lambda/api_handler/` | HTTP API handler for the eight routes (the package script also bundles `scoring.py` + `skills.json` for skill extraction) |
-| `frontend/` | `index.html`, `recruiter.html`, `upload.html`, `status.html`, `app.js`, `styles.css`, `config.example.js` |
+| `lambda/process_resume/` | SQS/S3-triggered processor: `lambda_function.py`, `scoring.py`, `skills.json` (184 skills with aliases), `requirements.txt` (pypdf, bundled into the zip) |
+| `lambda/api_handler/` | HTTP API handler for the eleven routes (the package script also bundles `scoring.py` + `skills.json` for skill extraction) |
+| `frontend/` | `index.html`, `recruiter.html`, `upload.html`, `status.html`, `app.js`, `styles.css`, `qrcode.js` (MIT, inlined), `config.example.js` |
 | `iam/` | trust policy, least-privilege inline policies for both roles, SQS queue access policy |
-| `tests/` | unit tests, six test resumes, Lambda console test events, curl smoke test, Postman collection |
-| `scripts/` | `package_lambda.py`, `make_test_resumes.py`, `load_test.py` |
-| `docs/` | blueprint, `test_matrix.md`, `cloudwatch-dashboard.json` |
+| `tests/` | 94 unit tests, eight realistic test resumes (R1–R8, PDF + text), Lambda console test events, curl smoke test, Postman collection |
+| `scripts/` | `package_lambda.py`, `make_test_resumes.py`, `load_test.py`, `draw_architecture.py`, `build_report.py` |
+| `docs/` | blueprint, `test_matrix.md`, `cloudwatch-dashboard.json`, architecture diagram, report sources |
 
 ## Local development
 
@@ -81,7 +103,7 @@ pip install -r requirements-dev.txt
 
 python -m unittest discover -s tests -v    # scoring + both handlers, AWS faked
 python -m pyflakes lambda scripts tests
-python scripts/make_test_resumes.py        # regenerate tests/resumes/R1..R6
+python scripts/make_test_resumes.py        # regenerate tests/resumes/R1..R8 (reportlab)
 python scripts/package_lambda.py           # dist/process_resume.zip, dist/api_handler.zip
 ```
 
@@ -105,39 +127,46 @@ recruiter key, used by the smoke and load tests) and `frontend/config.example.js
    `<SUFFIX>`).
 7. **Lambda `process_resume`** – Python 3.12, 256 MB, 120 s, role `role-processor`; upload
    `dist/process_resume.zip`; environment `JOBS_TABLE`, `CANDIDATES_TABLE`, `SNS_TOPIC_ARN`,
-   `SCORE_THRESHOLD=75`; SQS trigger on `resumerank-queue` with batch size 1, maximum
+   `SCORE_THRESHOLD=75` (default when a job has no `alertThreshold`); SQS trigger on `resumerank-queue` with batch size 1, maximum
    concurrency 5 and *report batch item failures*.
 8. **S3 → SQS** – resumes bucket → Event notifications: `PUT`, prefix `resumes/`, suffix `.pdf`,
    destination `resumerank-queue`.
 9. **Lambda `api_handler`** – Python 3.12, 256 MB, 10 s, role `role-api`; upload
    `dist/api_handler.zip`; environment `JOBS_TABLE`, `CANDIDATES_TABLE`, `SCORE_INDEX`,
-   `RESUMES_BUCKET`, `RECRUITER_KEY` (a long random string, kept out of Git).
-10. **API Gateway** – HTTP API `resumerank-api` with the eight routes of INTERFACES.md §3, all
+   `RESUMES_BUCKET`, `RECRUITER_KEY` (a long random string, kept out of Git) and `SNS_TOPIC_ARN`
+   (for emailing the shortlist). `role-api` needs `dynamodb:UpdateItem` on Jobs (close / reopen)
+   and `sns:Publish` on the topic – both are in `iam/role-api-policy.json`.
+10. **API Gateway** – HTTP API `resumerank-api` with the eleven routes above, all
     integrated with `api_handler`; stage `$default` with auto-deploy and throttling rate 20 /
     burst 50; CORS as in INTERFACES.md §4 (headers `content-type`, `x-recruiter-key`).
 11. **Website** – put the invoke URL in `frontend/config.js`; upload `index.html`,
-    `recruiter.html`, `upload.html`, `status.html`, `app.js`, `styles.css`, `config.js` to the
+    `recruiter.html`, `upload.html`, `status.html`, `app.js`, `styles.css`, `qrcode.js`, `config.js` to the
     site bucket; static website hosting with index document `index.html`; public read on the
     site bucket only; resumes bucket CORS allows `PUT` from the site origin.
 12. **Dashboard** – CloudWatch → Dashboards → create `ResumeRank` → Actions → View/edit source →
     paste `docs/cloudwatch-dashboard.json` (replace `<API_ID>`).
 
-Verify with `bash tests/api/smoke_test.sh`, the six resumes in
+Verify with `bash tests/api/smoke_test.sh`, the eight resumes in
 [docs/test_matrix.md](docs/test_matrix.md), then `python scripts/load_test.py`.
 
 ## Scoring
 
 ```
-skill_score = matched / required × 60
-exp_score   = min(years / max(min_years, 1), 1) × 20     (min_years = 0: 20 if any work/project dates)
-edu_score   = 20 if b.tech / b.e. / bachelor / m.tech / mca / bsc / msc / phd found, else 10
-score       = round(skill_score + exp_score + edu_score)
+skill      = matched_required / required × W_skills                       (default 60)
+experience = min(years / max(min_years, 1), 1) × W_experience             (default 20)
+             min_years = 0: full marks if the resume shows dated work, projects or activities
+education  = W_education if b.tech / b.e. / bachelor / m.tech / mca / bsc / msc / phd, else half  (default 20)
+bonus      = 2 per preferred skill found, at most 10
+score      = min(100, round(skill + experience + education + bonus))
 ```
 
-Skills are matched in two passes (aliases over the extracted text, then over Comprehend key
-phrases). Experience is the larger of explicit "N years" mentions and summed date ranges outside
-the education section (Comprehend DATE entities + text), merged for overlaps and capped at 15.
-Component scores are stored with every candidate so each number can be explained.
+With default weights and no preferred skills this is exactly the blueprint formula. Skills are
+matched in two passes (aliases over the extracted text, then over Comprehend key phrases), including
+skills inside brackets such as "AWS (Lambda, API Gateway)". Experience is the larger of explicit
+"N years" mentions and summed date ranges, counted **only in work sections** and unlabelled text:
+education dates never count, and project, hackathon and club-role dates are not work years. Ranges
+are merged for overlaps and capped at 15. Every component, the weights used and the bonus are stored
+with each candidate so each number can be explained.
 
 ## Limitations
 
@@ -150,7 +179,10 @@ Component scores are stored with every candidate so each number can be explained
   the processor then skips it and matches skills on the extracted text alone.
 - English PDF resumes only; unusual layouts or poor scans can OCR imperfectly – the text preview
   in the candidate drawer shows what was read.
-- SNS emails every confirmed subscriber of the topic, not just the job's `recruiterEmail`.
+- SNS emails every confirmed subscriber of the topic, not just the job's `recruiterEmail` – for score
+  alerts and for the emailed shortlist.
+- Duplicate applications are matched on the email typed into the form; a candidate using a
+  different email is treated as a new applicant.
 - The score is a transparent heuristic, not a model of candidate quality, and can encode bias
   (for example against career gaps).
 

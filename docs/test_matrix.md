@@ -48,6 +48,32 @@ Notes:
 - R8 scores 78 – above the 75 alert threshold with one skill missing and one year of experience
   against a two-year minimum.
 
+## Feature checks on the deployed system (15 Oct 2026)
+
+Run against the live API and site with scripted checks (browser automation for the pages, HTTP for
+the routes). Test jobs: "Tier 2 check" and "Tier 3 check".
+
+| Area | Check | Result |
+| --- | --- | --- |
+| Blind screening | names and emails masked as "Candidate #rank" in table, drawer and CSV; search ignores hidden names; setting kept per tab | ✅ |
+| Compare | panel appears after two picks, third pick refused, better value highlighted | ✅ |
+| Insights | recruiter landing view aggregates 7 jobs / 45 scored candidates; top gaps aws, docker, linux (17 each) | ✅ |
+| QR code | drawn on canvas from the inlined library; decoded back to the exact apply link | ✅ |
+| Phones / dark mode | 390 px: no sideways scroll, 50 px buttons, one column; dark theme kept across reloads | ✅ |
+| Job status | job closed → upload refused ("applications for this job are closed"), hidden from public list, still in recruiter list, shared link explains it | ✅ |
+| Deadline | job created with tomorrow's deadline; past deadline refused (unit test) | ✅ |
+| Duplicates | same email (different case) applied twice → first SUPERSEDED and unranked, second scored and ranked #1 | ✅ |
+| Notes | note saved with a shortlist decision and returned on the leaderboard | ✅ |
+| Email shortlist | `POST /shortlist/send` published 1 shortlisted candidate to SNS; email received | ✅ |
+| Alert threshold | threshold 95: R8 (78) sent no alert, R1 (100) did | ✅ |
+| Re-upload | scanned R3 FAILED → re-upload URL for the same key → second click 409 → R1 uploaded → SCORED under the same reference | ✅ |
+| Weights and bonus | weights 40/40/20 → components 40/40/20; preferred Terraform +2; total capped at 100 | ✅ |
+| Full text | 2,130 characters stored and returned for search | ✅ |
+| Unit tests | `python -m unittest discover -s tests` | 94 / 94 pass |
+
+The CloudWatch dashboard needs no change: the new features use the existing `CandidateScore`
+metric, Lambda and API Gateway metrics.
+
 ## Extra checks (cross-verification, Day 2 Hr 4)
 
 | Check | How | Expected |
