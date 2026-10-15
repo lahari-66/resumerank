@@ -88,6 +88,9 @@ class FakeTable:
         if m and item is not None:
             field = names.get(m.group(1), m.group(1))
             ok = item.get(field) in [values[v.strip()] for v in m.group(2).split(",")]
+        eq = re.fullmatch(r"(#?\w+) = (:\w+)", cond.strip())
+        if eq:
+            ok = item is not None and item.get(names.get(eq.group(1), eq.group(1))) == values[eq.group(2)]
         if not ok:
             raise ClientError({"Error": {"Code": "ConditionalCheckFailedException"}}, "UpdateItem")
         self.updates.append(kwargs)
@@ -471,6 +474,86 @@ class ApiHandlerTests(unittest.TestCase):
         self.assertIn("note", board["candidates"][0])
         for bad in ({"note": "x" * 501}, {"note": 5}, {}):
             self.assertEqual(self.call("POST /decision", {"jobId": job["jobId"], "candidateId": cid, **bad})[0], 400, bad)
+
+    # ------------------------------------------------------------ tier 3: preferred skills, weights, re-upload
+
+    def test_preferred_skills_and_weights_stored(self):
+        job = self.make_job(preferredSkills=["Terraform", "python", "Kubernetes"],
+                            weights={"skills": 50, "experience": 30, "education": 20})
+        stored = self.jobs.puts[-1]
+        self.assertEqual(stored["preferredSkills"], {"terraform", "kubernetes"})   # required ones dropped
+        self.assertEqual(stored["weights"], {"skills": 50, "experience": 30, "education": 20})
+        self.assertEqual(job["preferredSkills"], ["kubernetes", "terraform"])
+        _, one = self.call("GET /jobs", query={"jobId": job["jobId"]}, key=None)
+        self.assertEqual(one["weights"]["experience"], 30)
+
+    def test_defaults_are_not_stored(self):
+        self.make_job()
+        self.assertNotIn("preferredSkills", self.jobs.puts[-1])
+        self.assertNotIn("weights", self.jobs.puts[-1])
+        _, jobs = self.call("GET /jobs")
+        self.assertEqual(jobs["jobs"][0]["weights"], {"skills": 60, "experience": 20, "education": 20})
+
+    def test_weights_validation(self):
+        base = {"title": "x", "requiredSkills": ["python"], "recruiterEmail": "r@example.com"}
+        for weights in ({"skills": 50, "experience": 20, "education": 20}, {"skills": 60, "experience": 40},
+                        {"skills": 60.5, "experience": 19.5, "education": 20}, {"skills": 110, "experience": -10, "education": 0},
+                        [60, 20, 20], {"skills": True, "experience": 79, "education": 20}):
+            status, out = self.call("POST /jobs", {**base, "weights": weights})
+            self.assertEqual(status, 400, weights)
+        status, out = self.call("POST /jobs", {**base, "weights": {"skills": 50, "experience": 20, "education": 20}})
+        self.assertIn("add up to 100 (they add up to 90)", out["error"])
+        self.assertEqual(self.call("POST /jobs", {**base, "preferredSkills": ["x"] * 0 + [f"s{i}" for i in range(31)]})[0], 400)
+
+    def failed_candidate(self, job_id):
+        cid = "66666666-6666-4666-8666-666666666666"
+        self.cands.items.append({"jobId": job_id, "candidateId": cid, "name": "Scan", "status": "FAILED",
+                                 "score": Decimal(0), "failureReason": "no text layer in the PDF (scanned image)"})
+        return cid
+
+    def test_reupload_for_failed_candidate(self):
+        job = self.make_job()
+        cid = self.failed_candidate(job["jobId"])
+        status, out = self.call("POST /reupload-url", {"jobId": job["jobId"], "candidateId": cid,
+                                                       "contentType": "application/pdf", "fileSize": 2048}, key=None)
+        self.assertEqual(status, 200)
+        self.assertEqual(out["s3Key"], f"resumes/{job['jobId']}/{cid}.pdf")         # the same key
+        self.assertIn(f"/resumes/{job['jobId']}/{cid}.pdf?", out["uploadUrl"])
+        item = self.cands._find({"candidateId": cid})
+        self.assertEqual((item["status"], item["score"]), ("PENDING", 0))
+        self.assertNotIn("failureReason", item)
+        # a second click finds it PENDING, not FAILED
+        status, out = self.call("POST /reupload-url", {"jobId": job["jobId"], "candidateId": cid,
+                                                       "contentType": "application/pdf", "fileSize": 2048})
+        self.assertEqual(status, 409)
+
+    def test_reupload_rules(self):
+        job = self.make_job()
+        self.add_candidates(job["jobId"])
+        scored = "11111111-1111-4111-8111-111111111111"
+        base = {"jobId": job["jobId"], "contentType": "application/pdf", "fileSize": 2048}
+        self.assertEqual(self.call("POST /reupload-url", {**base, "candidateId": scored})[0], 409)
+        self.assertEqual(self.call("POST /reupload-url", {**base, "candidateId": UNKNOWN})[0], 404)
+        cid = self.failed_candidate(job["jobId"])
+        self.assertEqual(self.call("POST /reupload-url", {**base, "candidateId": cid, "contentType": "image/png"})[0], 400)
+        self.assertEqual(self.call("POST /reupload-url", {**base, "candidateId": cid, "fileSize": 9 * 1024 * 1024})[0], 400)
+        self.call("POST /jobs/status", {"jobId": job["jobId"], "status": "CLOSED"})
+        status, out = self.call("POST /reupload-url", {**base, "candidateId": cid})
+        self.assertEqual(status, 400)
+        self.assertIn("closed", out["error"])
+        self.assertEqual(self.cands._find({"candidateId": cid})["status"], "FAILED")
+
+    def test_new_candidate_fields_returned(self):
+        job = self.make_job()
+        self.add_candidates(job["jobId"])
+        self.cands.items[1].update(bonusScore=Decimal(4), matchedPreferred=["terraform"], fullText="High\nTerraform ...",
+                                   weights={"skills": Decimal(60), "experience": Decimal(20), "education": Decimal(20)})
+        _, board = self.call("GET /candidates", query={"jobId": job["jobId"]})
+        top = board["candidates"][0]
+        self.assertEqual((top["bonusScore"], top["matchedPreferred"], top["fullText"][:4]), (4, ["terraform"], "High"))
+        _, mine = self.call("GET /status", query={"jobId": job["jobId"], "candidateId": top["candidateId"]}, key=None)
+        self.assertEqual((mine["bonusScore"], mine["weights"]["skills"]), (4, 60))
+        self.assertNotIn("fullText", mine)
 
     # ------------------------------------------------------------ tier 2: send shortlist
 

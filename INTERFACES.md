@@ -93,6 +93,8 @@ resumes/{jobId}/{candidateId}.pdf
 | `deadline` | String | optional `YYYY-MM-DD`; applications close at the end of that day, IST |
 | `alertThreshold` | Number | integer 50–100, default 75: the score at which `process_resume` emails the recruiter |
 | `statusChangedAt` | String | ISO-8601 UTC, set by `POST /jobs/status` |
+| `preferredSkills` | String set | optional nice-to-have skills; each one found adds 2 bonus points, at most 10 |
+| `weights` | Map | optional `{skills, experience, education}` integers summing to 100; default `{60, 20, 20}` |
 
 ### Table `Candidates`
 
@@ -104,7 +106,11 @@ resumes/{jobId}/{candidateId}.pdf
 | `email` | String | API | from the upload form; absent for recruiter bulk uploads |
 | `status` | String | API → processor | `PENDING` → `SCORED` \| `FAILED`; API sets `SUPERSEDED` when the same email applies again |
 | `score` | Number | API (0) → processor | 0–100 composite score; **GSI sort key** |
-| `skillScore`, `expScore`, `eduScore` | Number | processor | component scores |
+| `skillScore`, `expScore`, `eduScore` | Number | processor | component scores, each out of its weight |
+| `bonusScore` | Number | processor | preferred-skill bonus, 0–10 |
+| `matchedPreferred` | List of String | processor | preferred skills found |
+| `weights` | Map | processor | the `{skills, experience, education}` weights this score was computed with |
+| `fullText` | String | processor | extracted text, first 20,000 characters (recruiter search) |
 | `matchedSkills`, `missingSkills` | List of String | processor | shown on the leaderboard |
 | `yearsExperience` | Number | processor | estimated, capped at 15 |
 | `textPreview` | String | processor | first 300 characters of OCR text |
@@ -139,6 +145,21 @@ resumes/{jobId}/{candidateId}.pdf
 - The SCORED / FAILED write is conditional on `status <> SUPERSEDED`: if the candidate applied again
   while this resume was still in the queue, the old record stays SUPERSEDED and no alert is sent.
 - The alert threshold is the job's `alertThreshold` when present, otherwise `SCORE_THRESHOLD`.
+- Rescoring is idempotent: every scored field (score, components, bonus, skills, weights,
+  `textPreview`, `fullText`, `processedAt`) is overwritten and `failureReason` removed, so a
+  re-uploaded resume leaves no trace of the failed attempt.
+
+### Scoring with weights and preferred skills
+
+```
+skill      = matched_required / required × W_skills
+experience = min(years / max(min_years, 1), 1) × W_experience     (min_years = 0: full if dated work/activity)
+education  = W_education if a degree keyword is found, else W_education / 2
+bonus      = min(2 × matched_preferred, 10)
+score      = min(100, round(skill + experience + education + bonus))
+```
+
+With the default weights (60/20/20) and no preferred skills this is exactly blueprint section 12.
 
 ### Duplicate applications (why a filtered Query)
 
@@ -171,6 +192,7 @@ candidate), `429` (API Gateway throttling) or `500` (unexpected).
 | `POST /upload-url` | public | PENDING candidate + pre-signed PUT URL |
 | `GET /status?jobId=&candidateId=` | public | a candidate's own result |
 | `POST /skills/extract` | public | skills found in a job description |
+| `POST /reupload-url` | public | new pre-signed PUT for a FAILED candidate's same key; resets it to PENDING |
 | `POST /jobs` | recruiter | create a job |
 | `GET /candidates?jobId=` | recruiter | ranked leaderboard |
 | `POST /jobs/status` | recruiter | close or reopen a job |
@@ -199,7 +221,9 @@ Request:
 ```
 
 Optional fields: `description` (≤ 5,000 characters), `deadline` (`YYYY-MM-DD`, today or later),
-`alertThreshold` (integer 50–100, default 75). New jobs start with `status: "OPEN"`.
+`alertThreshold` (integer 50–100, default 75), `preferredSkills` (list, ≤ 30, not also required),
+`weights` (`{"skills": 50, "experience": 30, "education": 20}` – integers 0–100 summing to 100).
+New jobs start with `status: "OPEN"`.
 
 Rules: `title` non-empty; `requiredSkills` a non-empty list, trimmed + lower-cased +
 de-duplicated; `minYears` integer 0–15; `recruiterEmail` contains `@`.
@@ -319,9 +343,21 @@ applications.
 
 ### `GET /status?jobId=&candidateId=`
 
-The candidate's `status`, `score` (null until SCORED), component scores, `matchedSkills`,
-`missingSkills`, `failureReason`, `submittedAt`, `processedAt` and the job's title and skills.
+The candidate's `status`, `score` (null until SCORED), component scores, `bonusScore`,
+`weights`, `matchedSkills`, `missingSkills`, `matchedPreferred`, `failureReason`, `submittedAt`,
+`processedAt` and the job's title, skills and preferred skills.
 The recruiter's `decision` and the email are not returned.
+
+### `POST /reupload-url`
+
+Request `{ "jobId": "…", "candidateId": "…", "contentType": "application/pdf", "fileSize": 120000 }`
+(same file rules as `POST /upload-url`). Only a candidate whose `status` is `FAILED` can re-upload,
+and only while the job accepts applications: the item is switched to `PENDING` (condition
+`status = FAILED`, so two clicks cannot race), and a pre-signed PUT is returned for the **same key**
+`resumes/{jobId}/{candidateId}.pdf`. The new upload fires the S3 event again and the resume is
+rescored. `409` when the candidate is not FAILED; `404` when it does not exist.
+
+Response `200`: `{ "candidateId": "…", "s3Key": "…", "uploadUrl": "…", "expiresIn": 300, "headers": {…} }`.
 
 ### `POST /skills/extract`
 
@@ -344,7 +380,8 @@ SHORTLISTED candidate of the job (rank, name, email, score, matched skills), the
 ### `GET /candidates` – superseded applications
 
 Candidates with `status: "SUPERSEDED"` are still returned (with `rank: null`); the rank counts
-only the others. Each candidate also carries `note`. The leaderboard hides SUPERSEDED rows unless
+only the others. Each candidate also carries `note`, `bonusScore`, `matchedPreferred`, `weights` and
+`fullText` (≤ 20,000 characters, searched in the browser). The leaderboard hides SUPERSEDED rows unless
 the filter "Replaced applications" is chosen.
 
 ### `GET /resume-url?jobId=&candidateId=`

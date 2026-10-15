@@ -5,6 +5,7 @@ Public (candidates and the home page):
     POST /upload-url        PENDING candidate + pre-signed S3 PUT URL
     GET  /status            a candidate's own result, ?jobId=&candidateId=
     POST /skills/extract    required skills found in a pasted job description
+    POST /reupload-url      new pre-signed PUT for a FAILED candidate (same key, rescored)
 
 Recruiter (header x-recruiter-key must match the RECRUITER_KEY environment variable):
     POST /jobs              create a job (optional deadline, alert threshold)
@@ -58,6 +59,8 @@ DECISIONS = {"SHORTLISTED", "REJECTED", "NONE"}
 JOB_STATUSES = {"OPEN", "CLOSED"}
 MAX_NOTE = 500
 DEFAULT_ALERT_THRESHOLD = 75
+DEFAULT_WEIGHTS = {"skills": 60, "experience": 20, "education": 20}
+MAX_SKILLS = 30
 
 dynamodb = boto3.resource("dynamodb")
 # SigV4 + regional virtual-hosted endpoint so the browser talks straight to the bucket's region
@@ -206,6 +209,8 @@ def public_job(job):
         "status": job_status(job),
         "deadline": job.get("deadline"),
         "alertThreshold": job.get("alertThreshold", DEFAULT_ALERT_THRESHOLD),
+        "preferredSkills": job.get("preferredSkills", set()),
+        "weights": job.get("weights") or DEFAULT_WEIGHTS,
         "acceptingApplications": closed_reason(job) is None,
     }
 
@@ -249,14 +254,7 @@ def list_jobs(event):
                          "totalCandidates": sum(j["candidateCount"] for j in out)})
 
 
-def create_upload_url(event):
-    if not RESUMES_BUCKET:
-        raise BadRequest("server is missing RESUMES_BUCKET", status=500)
-    body = parse_body(event)
-    job_id = id_field(body.get("jobId"), "jobId")
-    name = text_field(body, "name")
-    email = email_field(body, "email", required=False)
-
+def pdf_size(body):
     if body.get("contentType") != PDF_TYPE:
         raise BadRequest("only PDF files are accepted (contentType must be application/pdf)")
     size = body.get("fileSize")
@@ -264,6 +262,27 @@ def create_upload_url(event):
         raise BadRequest("'fileSize' must be the file size in bytes")
     if size > MAX_UPLOAD_BYTES:
         raise BadRequest(f"file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
+    return size
+
+
+def presigned_put(key, size):
+    # ContentType and ContentLength are signed, so S3 rejects any other type or size
+    return s3.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": RESUMES_BUCKET, "Key": key, "ContentType": PDF_TYPE, "ContentLength": size},
+        ExpiresIn=UPLOAD_URL_TTL,
+        HttpMethod="PUT",
+    )
+
+
+def create_upload_url(event):
+    if not RESUMES_BUCKET:
+        raise BadRequest("server is missing RESUMES_BUCKET", status=500)
+    body = parse_body(event)
+    job_id = id_field(body.get("jobId"), "jobId")
+    name = text_field(body, "name")
+    email = email_field(body, "email", required=False)
+    size = pdf_size(body)
 
     job = get_job(job_id)
     reason = closed_reason(job)
@@ -286,13 +305,7 @@ def create_upload_url(event):
     candidates_table.put_item(Item=item)
     superseded = supersede_earlier(job_id, email, candidate_id) if email else []
 
-    # ContentType and ContentLength are signed, so S3 rejects any other type or size
-    url = s3.generate_presigned_url(
-        "put_object",
-        Params={"Bucket": RESUMES_BUCKET, "Key": key, "ContentType": PDF_TYPE, "ContentLength": size},
-        ExpiresIn=UPLOAD_URL_TTL,
-        HttpMethod="PUT",
-    )
+    url = presigned_put(key, size)
     logger.info("upload url issued: %s (%d bytes)%s", key, size,
                 f", supersedes {', '.join(superseded)}" if superseded else "")
     return respond(200, {
@@ -303,6 +316,37 @@ def create_upload_url(event):
         "expiresIn": UPLOAD_URL_TTL,
         "headers": {"Content-Type": PDF_TYPE},
     })
+
+
+def create_reupload_url(event):
+    """A FAILED candidate uploads a better PDF to the same key; the S3 event rescores it."""
+    if not RESUMES_BUCKET:
+        raise BadRequest("server is missing RESUMES_BUCKET", status=500)
+    body = parse_body(event)
+    job_id = id_field(body.get("jobId"), "jobId")
+    candidate_id = id_field(body.get("candidateId"), "candidateId")
+    size = pdf_size(body)
+    reason = closed_reason(get_job(job_id))
+    if reason:
+        raise BadRequest(reason)
+    key = f"resumes/{job_id}/{candidate_id}.pdf"
+    try:
+        candidates_table.update_item(
+            Key={"jobId": job_id, "candidateId": candidate_id},
+            UpdateExpression="SET #s = :pending, score = :zero, reuploadedAt = :t, s3Key = :k REMOVE failureReason",
+            ConditionExpression="#s = :failed",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":pending": "PENDING", ":failed": "FAILED", ":zero": 0,
+                                       ":t": now_iso(), ":k": key},
+        )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+        get_candidate(job_id, candidate_id)   # 404 if it does not exist at all
+        raise BadRequest("only a FAILED application can be re-uploaded", status=409)
+    logger.info("re-upload url issued: %s (%d bytes)", key, size)
+    return respond(200, {"candidateId": candidate_id, "s3Key": key, "uploadUrl": presigned_put(key, size),
+                         "expiresIn": UPLOAD_URL_TTL, "headers": {"Content-Type": PDF_TYPE}})
 
 
 def supersede_earlier(job_id, email, new_candidate_id):
@@ -349,7 +393,8 @@ def candidate_status(event):
         "jobId": job_id,
         "candidateId": candidate_id,
         "job": {"title": job.get("title"), "requiredSkills": job.get("requiredSkills", set()),
-                "minYears": job.get("minYears", 0)},
+                "preferredSkills": job.get("preferredSkills", set()), "minYears": job.get("minYears", 0),
+                "acceptingApplications": closed_reason(job) is None},
         "name": c.get("name"),
         "status": c.get("status"),
         "submittedAt": c.get("createdAt"),
@@ -358,9 +403,12 @@ def candidate_status(event):
         "skillScore": c.get("skillScore"),
         "expScore": c.get("expScore"),
         "eduScore": c.get("eduScore"),
+        "bonusScore": c.get("bonusScore", 0),
+        "weights": c.get("weights") or DEFAULT_WEIGHTS,
         "yearsExperience": c.get("yearsExperience"),
         "matchedSkills": c.get("matchedSkills", []),
         "missingSkills": c.get("missingSkills", []),
+        "matchedPreferred": c.get("matchedPreferred", []),
         "failureReason": c.get("failureReason"),
         "supersededBy": c.get("supersededBy"),
     })
@@ -381,6 +429,29 @@ def extract_skills(event):
 
 # ---------------------------------------------------------------- recruiter routes
 
+def skill_set(values, name):
+    out = {v.strip().lower() for v in values if isinstance(v, str) and v.strip()}
+    if len(out) > MAX_SKILLS or any(len(v) > 50 for v in out):
+        raise BadRequest(f"'{name}' allows at most {MAX_SKILLS} skills of up to 50 characters")
+    return out
+
+
+def parse_weights(raw):
+    if raw is None:
+        return dict(DEFAULT_WEIGHTS)
+    if not isinstance(raw, dict) or set(raw) != set(DEFAULT_WEIGHTS):
+        raise BadRequest("'weights' must have exactly skills, experience and education")
+    out = {}
+    for k in DEFAULT_WEIGHTS:
+        v = raw[k]
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 100:
+            raise BadRequest("each weight must be a whole number from 0 to 100")
+        out[k] = v
+    if sum(out.values()) != 100:
+        raise BadRequest(f"the weights must add up to 100 (they add up to {sum(out.values())})")
+    return out
+
+
 def create_job(event):
     require_recruiter(event)
     body = parse_body(event)
@@ -392,11 +463,17 @@ def create_job(event):
         skills = skills.split(",")
     if not isinstance(skills, list):
         raise BadRequest("'requiredSkills' must be a list of skill names")
-    skills = {s.strip().lower() for s in skills if isinstance(s, str) and s.strip()}
+    skills = skill_set(skills, "requiredSkills")
     if not skills:
         raise BadRequest("'requiredSkills' must contain at least one skill")
-    if len(skills) > 30 or any(len(s) > 50 for s in skills):
-        raise BadRequest("'requiredSkills' allows at most 30 skills of up to 50 characters")
+
+    preferred = body.get("preferredSkills") or []
+    if isinstance(preferred, str):
+        preferred = preferred.split(",")
+    if not isinstance(preferred, list):
+        raise BadRequest("'preferredSkills' must be a list of skill names")
+    preferred = skill_set(preferred, "preferredSkills") - skills
+    weights = parse_weights(body.get("weights"))
 
     min_years = body.get("minYears", 0)
     try:
@@ -440,6 +517,10 @@ def create_job(event):
     }
     if deadline:
         item["deadline"] = deadline
+    if preferred:
+        item["preferredSkills"] = preferred          # a DynamoDB string set may not be empty
+    if weights != DEFAULT_WEIGHTS:
+        item["weights"] = weights
     if description.strip():
         item["description"] = description.strip()
     jobs_table.put_item(Item=item)
@@ -473,7 +554,8 @@ def set_job_status(event):
 CANDIDATE_FIELDS = (
     "candidateId", "name", "email", "status", "score", "skillScore", "expScore", "eduScore",
     "matchedSkills", "missingSkills", "yearsExperience", "textPreview", "createdAt", "processedAt",
-    "failureReason", "decision", "decidedAt", "note", "supersededBy",
+    "failureReason", "decision", "decidedAt", "note", "supersededBy", "bonusScore", "matchedPreferred",
+    "weights", "fullText",
 )
 
 
@@ -630,6 +712,7 @@ ROUTES = {
     "POST /decision": set_decision,
     "GET /resume-url": resume_url,
     "POST /skills/extract": extract_skills,
+    "POST /reupload-url": create_reupload_url,
 }
 
 
