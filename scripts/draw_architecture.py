@@ -22,11 +22,12 @@ SIZE = 78                               # icon size, as in the AWS icon set
 CANVAS_W, CANVAS_H = 1700, 1060
 
 COLOUR = {"storage": "#7AA116", "network": "#8C4FFF", "compute": "#ED7100", "database": "#C925D1",
-          "integration": "#E7157B", "ml": "#01A88D", "management": "#E7157B", "security": "#DD344C"}
+          "integration": "#E7157B", "ml": "#01A88D", "management": "#E7157B", "security": "#DD344C",
+          "frontend": "#DD344C"}
 
 # id: (x, y, label, category, aws4 resource icon)
 ICONS = {
-    "site":    (330, 190, "Amazon S3<br>static website", "storage", "s3"),
+    "site":    (330, 190, "AWS Amplify Hosting<br>website over HTTPS", "frontend", "amplify"),
     "apigw":   (580, 190, "Amazon API Gateway<br>HTTP API · throttled", "network", "api_gateway"),
     "api":     (830, 190, "AWS Lambda<br>api_handler", "compute", "lambda"),
     "ddb":     (1080, 440, "Amazon DynamoDB<br>Jobs · Candidates", "database", "dynamodb"),
@@ -76,7 +77,7 @@ STEPS = [(1, 280, 345), (2, 455, 195), (3, 705, 195), (4, 1150, 340), (5, 280, 6
          (6, 455, 685), (7, 705, 685), (8, 1030, 815), (9, 840, 560), (10, 960, 685), (11, 1210, 685)]
 
 LEGEND = [
-    "1  Users open the static pages",
+    "1  Users open the website over HTTPS (Amplify)",
     "2  Pages call the API (CORS, throttling)",
     "3  API Gateway invokes api_handler",
     "4  Jobs, leaderboard, decisions in DynamoDB",
@@ -85,7 +86,7 @@ LEGEND = [
     "7  Lambda scales out to drain the queue (max 5)",
     "8  Text + entities (Textract / Comprehend, or pypdf)",
     "9  Score written: SCORED or FAILED",
-    "10  Score ≥ 75 publishes an alert",
+    "10  Score ≥ the job's alert threshold publishes an alert",
     "11  Recruiter receives the email",
 ]
 
@@ -147,7 +148,7 @@ def build_xml():
     add(f'<mxCell id="{{id}}" value="{escape(legend)}" style="text;html=1;whiteSpace=wrap;fontSize=12;fontColor=#232F3E;'
         f'align=left;verticalAlign=top;spacing=6;" vertex="1" parent="1">'
         f'<mxGeometry x="1280" y="790" width="370" height="225" as="geometry"/></mxCell>')
-    add('<mxCell id="{id}" value="Private bucket · pre-signed URLs · recruiter access key · '
+    add('<mxCell id="{id}" value="HTTPS via Amplify · private resumes bucket · pre-signed URLs · recruiter access key · '
         'CORS limited to the site · Rs. 0 on the AWS Free Tier" style="text;html=1;whiteSpace=wrap;fontSize=12;'
         'fontColor=#545B64;align=center;" vertex="1" parent="1"><mxGeometry x="1280" y="380" width="350" height="44" as="geometry"/></mxCell>')
 
