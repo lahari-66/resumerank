@@ -73,6 +73,16 @@
             <div id="skill-chips" style="margin-bottom:6px"></div>
             <input type="text" id="skill-input" placeholder="type a skill and press Enter (or comma)">
             <p class="hint">Click a skill to remove it. Aliases such as “JS” or “Amazon Web Services” are matched automatically.</p>
+            <label for="pref-input">Preferred skills (optional) – each one found adds 2 bonus points, up to 10</label>
+            <div id="pref-chips" style="margin-bottom:6px"></div>
+            <input type="text" id="pref-input" placeholder="nice-to-have skill, Enter to add">
+            <label>Score weights – must add up to 100</label>
+            <div class="row weights">
+              <div><span class="hint">Skills</span><input type="number" id="w-skills" min="0" max="100" value="60"></div>
+              <div><span class="hint">Experience</span><input type="number" id="w-exp" min="0" max="100" value="20"></div>
+              <div><span class="hint">Education</span><input type="number" id="w-edu" min="0" max="100" value="20"></div>
+              <div style="flex:0 1 120px"><span class="hint">Total</span><div class="weight-sum" id="w-sum">100</div></div>
+            </div>
             <button type="submit" id="job-submit">Create job</button>
           </form>
           <div class="message" id="job-message"></div>
@@ -132,7 +142,7 @@
 
           <div class="card">
             <div class="toolbar">
-              <input type="search" id="search" placeholder="Search name or skill…">
+              <input type="search" id="search" placeholder="Search name, email, skill or any word in the resume…">
               <select id="filter">
                 <option value="all">All candidates</option>
                 <option value="SCORED">Scored</option>
@@ -322,33 +332,54 @@
     }
 
     // ------------------------------------------------------------ new job form
-    function renderSkillChips() {
-      const box = $("skill-chips");
+    state.preferred = [];
+    const CHIP_LISTS = { skills: "skill-chips", preferred: "pref-chips" };
+    function renderChips(list) {
+      const box = $(CHIP_LISTS[list]);
       box.replaceChildren();
-      state.skills.forEach((s) => box.appendChild(RR.el("span", {
-        cls: "chip neutral removable", text: s, attrs: { title: "remove" },
-        on: { click: () => { state.skills = state.skills.filter((x) => x !== s); renderSkillChips(); } },
+      state[list].forEach((s) => box.appendChild(RR.el("span", {
+        cls: "chip " + (list === "skills" ? "neutral" : "pref") + " removable", text: s, attrs: { title: "remove" },
+        on: { click: () => { state[list] = state[list].filter((x) => x !== s); renderChips(list); } },
       })));
     }
-    function addSkills(list) {
-      list.map((s) => s.trim().toLowerCase()).filter(Boolean).forEach((s) => {
-        if (!state.skills.includes(s)) state.skills.push(s);
+    function renderSkillChips() { renderChips("skills"); renderChips("preferred"); }
+    function addTo(list, values) {
+      values.map((s) => s.trim().toLowerCase()).filter(Boolean).forEach((s) => {
+        if (!state[list].includes(s)) state[list].push(s);
       });
+      if (list === "skills") state.preferred = state.preferred.filter((s) => !state.skills.includes(s));
       renderSkillChips();
     }
-    $("skill-input").addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === ",") {
-        e.preventDefault();
-        addSkills(e.target.value.split(","));
-        e.target.value = "";
-      }
+    function addSkills(values) { addTo("skills", values); }
+    [["skill-input", "skills"], ["pref-input", "preferred"]].forEach(([input, list]) => {
+      $(input).addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === ",") {
+          e.preventDefault();
+          addTo(list, e.target.value.split(","));
+          e.target.value = "";
+        }
+      });
     });
+    function weights() {
+      return { skills: parseInt($("w-skills").value, 10), experience: parseInt($("w-exp").value, 10),
+               education: parseInt($("w-edu").value, 10) };
+    }
+    function updateWeightSum() {
+      const w = weights();
+      const total = [w.skills, w.experience, w.education].reduce((a, v) => a + (Number.isFinite(v) ? v : 0), 0);
+      $("w-sum").textContent = total;
+      $("w-sum").classList.toggle("bad", total !== 100);
+      return total;
+    }
+    ["w-skills", "w-exp", "w-edu"].forEach((id) => $(id).addEventListener("input", updateWeightSum));
     $("new-job-btn").addEventListener("click", () => {
       clearInterval(state.timer);
       state.jobId = "";
       state.skills = [];
+      state.preferred = [];
       renderSkillChips();
       $("job-form").reset();
+      updateWeightSum();
       $("deadline").min = new Date().toISOString().slice(0, 10);
       RR.hide($("job-message"));
       showPanel("job-form-card");
@@ -366,7 +397,13 @@
     $("job-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       addSkills($("skill-input").value.split(","));
+      addTo("preferred", $("pref-input").value.split(","));
       $("skill-input").value = "";
+      $("pref-input").value = "";
+      if (updateWeightSum() !== 100) {
+        RR.show($("job-message"), "The three score weights must add up to 100.", "error");
+        return;
+      }
       const body = {
         title: $("title").value.trim(),
         recruiterEmail: $("recruiter-email").value.trim(),
@@ -374,6 +411,8 @@
         requiredSkills: state.skills,
         description: $("description").value.trim(),
         alertThreshold: parseInt($("alert-threshold").value, 10) || 75,
+        preferredSkills: state.preferred,
+        weights: weights(),
       };
       if ($("deadline").value) body.deadline = $("deadline").value;
       if (body.alertThreshold < 50 || body.alertThreshold > 100) {
@@ -470,7 +509,10 @@
       const job = data.job;
       $("jv-title").textContent = job.title;
       $("jv-meta").textContent = `Minimum ${job.minYears} year(s) · alert at ${job.alertThreshold ?? 75}+ · created ${RR.when(job.createdAt)}`;
-      $("jv-skills").replaceChildren(RR.chips(job.requiredSkills, "neutral"));
+      const w = job.weights || { skills: 60, experience: 20, education: 20 };
+      $("jv-skills").replaceChildren(RR.chips(job.requiredSkills, "neutral"),
+        ...((job.preferredSkills || []).length ? [RR.el("span", { cls: "meta", text: " + preferred: " }), RR.chips(job.preferredSkills, "pref")] : []),
+        RR.el("div", { cls: "meta", text: `Weights: skills ${w.skills} · experience ${w.experience} · education ${w.education}` }));
       $("jv-state").textContent = jobStateLabel(job);
       $("jv-state").className = "job-state " + (job.acceptingApplications === false ? "closed" : "open");
       $("toggle-job").textContent = job.status === "CLOSED" ? "Reopen applications" : "Close applications";
@@ -526,7 +568,8 @@
         if (["SHORTLISTED", "REJECTED"].includes(f) && c.decision !== f) return false;
         if (!q) return true;
         const who = masked(c) ? [displayName(c)] : [c.name, c.email];   // never search hidden names
-        return [...who, ...(c.matchedSkills || []), ...(c.missingSkills || [])]
+        const text = masked(c) ? [] : [c.fullText || c.textPreview];
+        return [...who, ...text, ...(c.matchedSkills || []), ...(c.missingSkills || []), ...(c.matchedPreferred || [])]
           .some((v) => v && String(v).toLowerCase().includes(q));
       });
     }
@@ -582,6 +625,7 @@
         ["Skills", (c) => (c.skillScore ?? "–"), (c) => num(c.skillScore)],
         ["Experience", (c) => (c.expScore ?? "–"), (c) => num(c.expScore)],
         ["Education", (c) => (c.eduScore ?? "–"), (c) => num(c.eduScore)],
+        ["Bonus", (c) => (c.bonusScore ?? 0), (c) => num(c.bonusScore ?? 0)],
         ["Years (est.)", (c) => (c.yearsExperience ?? "–"), (c) => num(c.yearsExperience)],
         ["Matched skills", (c) => (c.matchedSkills || []).join(", ") || "–", (c) => (c.matchedSkills || []).length],
         ["Missing skills", (c) => (c.missingSkills || []).join(", ") || "–", (c) => -(c.missingSkills || []).length],
@@ -608,7 +652,7 @@
     $("export").addEventListener("click", () => {
       const rows = filtered();
       if (!rows.length) return;
-      const cols = ["rank", "name", "email", "status", "score", "skillScore", "expScore", "eduScore",
+      const cols = ["rank", "name", "email", "status", "score", "skillScore", "expScore", "eduScore", "bonusScore", "matchedPreferred",
                     "yearsExperience", "matchedSkills", "missingSkills", "decision", "note", "processedAt", "failureReason"];
       const cell = (v) => {
         const s = Array.isArray(v) ? v.join("; ") : (v ?? "");
@@ -668,9 +712,12 @@
       $("d-score").replaceChildren(RR.scoreBadge(c));
       $("d-status").replaceChildren(RR.el("span", { cls: "status " + c.status, text: c.status }));
       $("d-decision").replaceChildren(c.decision && c.decision !== "NONE" ? RR.el("span", { cls: "decision " + c.decision, text: c.decision }) : RR.el("span"));
-      $("d-breakdown").replaceChildren(...breakdownRow("Skills", c.skillScore, 60), ...breakdownRow("Experience", c.expScore, 20), ...breakdownRow("Education", c.eduScore, 20));
+      const w = c.weights || { skills: 60, experience: 20, education: 20 };
+      $("d-breakdown").replaceChildren(...breakdownRow("Skills", c.skillScore, w.skills), ...breakdownRow("Experience", c.expScore, w.experience),
+        ...breakdownRow("Education", c.eduScore, w.education), ...breakdownRow("Bonus", c.bonusScore ?? 0, 10));
       $("d-matched").replaceChildren(RR.chips(c.matchedSkills, "match"));
-      $("d-missing").replaceChildren(RR.chips(c.missingSkills, "miss"));
+      $("d-missing").replaceChildren(RR.chips(c.missingSkills, "miss"),
+        ...((c.matchedPreferred || []).length ? [RR.el("div", { cls: "meta", text: "Preferred skills found:" }), RR.chips(c.matchedPreferred, "pref")] : []));
       if (c.failureReason) RR.show($("d-failure"), c.failureReason, "error"); else RR.hide($("d-failure"));
       if (document.activeElement !== $("d-note")) {
         $("d-note").value = c.note || "";

@@ -187,7 +187,11 @@ tbody tr:hover { background: var(--hover-bg); }
 .chip.match { background: var(--high-bg); color: var(--high); }
 .chip.miss { background: var(--low-bg); color: var(--low); }
 .chip.neutral { background: var(--accent-soft); color: var(--chip-neutral); }
+.chip.pref { background: var(--mid-bg); color: var(--mid); }
 .chip.removable { cursor: pointer; }
+.weights > div { flex: 1 1 110px; }
+.weight-sum { font-size: 1.3rem; font-weight: 700; padding: 6px 0; color: var(--high); }
+.weight-sum.bad { color: var(--low); }
 .chip.removable::after { content: " ×"; }
 
 .status { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; }

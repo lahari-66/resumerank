@@ -40,6 +40,12 @@
         <div class="message error show" id="r-reason"></div>
         <p class="meta" id="r-tip">Tip: export your resume to PDF directly from Word, Google Docs or LaTeX so it contains
           selectable text, then upload it again.</p>
+        <div id="r-reupload" class="hidden">
+          <label for="reupload-file">Re-upload a text-based PDF (up to 5 MB)</label>
+          <input type="file" id="reupload-file" accept="application/pdf,.pdf">
+          <button type="button" id="reupload-btn">Re-upload a text-based PDF</button>
+          <div class="message" id="reupload-message"></div>
+        </div>
       </div>
 
       <div id="r-scored" class="hidden">
@@ -51,6 +57,7 @@
         </div>
         <h3 style="margin-top:20px">Skills we found</h3>
         <div id="r-matched"></div>
+        <div id="r-pref"></div>
         <h3 style="margin-top:16px">Skills the job asks for that we did not find</h3>
         <div id="r-missing"></div>
         <p class="meta" id="r-advice" style="margin-top:12px"></p>
@@ -94,6 +101,7 @@
           "Track the newer one with the reference from your latest upload.";
         $("r-reason").className = "message info show";
         $("r-tip").classList.add("hidden");
+        $("r-reupload").classList.add("hidden");
         return;
       }
       clearInterval(timer);
@@ -102,6 +110,7 @@
         $("r-reason").textContent = "We could not read this resume: " + (d.failureReason || "unknown error");
         $("r-reason").className = "message error show";
         $("r-tip").classList.remove("hidden");
+        $("r-reupload").classList.toggle("hidden", d.job.acceptingApplications === false);
         return;
       }
       $("r-scored").classList.remove("hidden");
@@ -109,11 +118,15 @@
       const ring = $("r-ring");
       ring.style.setProperty("--p", d.score);
       ring.style.setProperty("--c", d.score >= 75 ? "var(--high)" : d.score >= 50 ? "var(--mid)" : "var(--low)");
+      const w = d.weights || { skills: 60, experience: 20, education: 20 };
       $("r-breakdown").replaceChildren(
-        ...breakdownRow("Skills", d.skillScore, 60),
-        ...breakdownRow("Experience", d.expScore, 20),
-        ...breakdownRow("Education", d.eduScore, 20),
+        ...breakdownRow("Skills", d.skillScore, w.skills),
+        ...breakdownRow("Experience", d.expScore, w.experience),
+        ...breakdownRow("Education", d.eduScore, w.education),
+        ...breakdownRow("Bonus", d.bonusScore || 0, 10),
       );
+      $("r-pref").replaceChildren(...((d.matchedPreferred || []).length
+        ? [RR.el("p", { cls: "meta", text: "Preferred skills found (bonus points):" }), RR.chips(d.matchedPreferred, "pref")] : []));
       $("r-matched").replaceChildren(RR.chips(d.matchedSkills, "match", "none of the required skills"));
       $("r-missing").replaceChildren(RR.chips(d.missingSkills, "miss", "nothing – every required skill was found"));
       $("r-advice").textContent = d.missingSkills.length
@@ -136,6 +149,29 @@
         RR.show($("message"), "Could not find that application: " + e.message, "error");
       }
     }
+
+    $("reupload-btn").addEventListener("click", async () => {
+      const box = $("reupload-message");
+      const file = $("reupload-file").files[0];
+      if (!file) { RR.show(box, "Choose a PDF first.", "error"); return; }
+      if (!file.name.toLowerCase().endsWith(".pdf")) { RR.show(box, "Only PDF files are accepted.", "error"); return; }
+      if (file.size > 5 * 1024 * 1024) { RR.show(box, "The file is larger than 5 MB.", "error"); return; }
+      $("reupload-btn").disabled = true;
+      try {
+        const signed = await RR.api("/reupload-url", { method: "POST", body: {
+          jobId: $("job-id").value.trim(), candidateId: $("candidate-id").value.trim(),
+          contentType: "application/pdf", fileSize: file.size } });
+        const put = await fetch(signed.uploadUrl, { method: "PUT", headers: signed.headers, body: file });
+        if (!put.ok) throw new Error("upload to storage failed with status " + put.status);
+        RR.show(box, "Uploaded – your resume is being scored again.", "ok");
+        $("reupload-file").value = "";
+        start();
+      } catch (e) {
+        RR.show(box, "Re-upload failed: " + e.message, "error");
+      } finally {
+        $("reupload-btn").disabled = false;
+      }
+    });
 
     function start() {
       clearInterval(timer);
