@@ -198,6 +198,43 @@ class RealCvSkills(unittest.TestCase):
         self.assertNotIn("next.js", scoring.find_skills("Next steps: build the next release"))
 
 
+class WeightsAndPreferredSkills(unittest.TestCase):
+    def read(self, rid):
+        with open(os.path.join(RESUMES, f"{rid}.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_defaults_are_the_blueprint_formula(self):
+        r = score(self.read("R4"))
+        self.assertEqual((r["score"], r["bonusScore"], r["weights"]), (44, 0, {"skills": 60, "experience": 20, "education": 20}))
+
+    def test_custom_weights_scale_each_component(self):
+        # R4: 2/5 skills, 1 of 2 years, no degree
+        r = score(self.read("R4"), weights={"skills": 40, "experience": 40, "education": 20})
+        self.assertEqual((r["skillScore"], r["expScore"], r["eduScore"], r["score"]), (16, 20, 10, 46))
+        r = score(self.read("R1"), weights={"skills": 80, "experience": 10, "education": 10})
+        self.assertEqual(r["score"], 100)
+
+    def test_invalid_weights_fall_back_to_defaults(self):
+        for bad in ({"skills": 50, "experience": 20, "education": 20}, {"skills": 120, "experience": -10, "education": -10},
+                    {"skills": "a", "experience": 20, "education": 20}, {"skills": 60}):
+            self.assertEqual(scoring.normalise_weights(bad), scoring.DEFAULT_WEIGHTS, bad)
+
+    def test_preferred_skills_bonus(self):
+        # R8 lists FastAPI, GitHub Actions, pytest, GraphQL and Postman
+        r = score(self.read("R8"), preferred_skills=["fastapi", "GitHub Actions", "kubernetes"])
+        self.assertEqual(r["matchedPreferred"], ["fastapi", "github actions"])
+        self.assertEqual((r["bonusScore"], r["score"]), (4, 82))   # 78 + 2 × 2
+
+    def test_bonus_is_capped_at_10_and_total_at_100(self):
+        prefs = ["terraform", "fastapi", "pytest", "github actions", "mysql", "postgresql", "dynamodb"]
+        r = score(self.read("R1"), preferred_skills=prefs)
+        self.assertEqual((r["bonusScore"], r["score"]), (10, 100))
+
+    def test_required_skill_is_not_also_a_bonus(self):
+        r = score(self.read("R1"), preferred_skills=["python", "Amazon Web Services"])
+        self.assertEqual((r["matchedPreferred"], r["bonusScore"]), ([], 0))
+
+
 class TestResumes(unittest.TestCase):
     """Expected scores and bands from docs/test_matrix.md, scored on the source text (no OCR)."""
 

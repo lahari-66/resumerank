@@ -191,6 +191,39 @@ class ProcessResumeTests(unittest.TestCase):
         self.sns.publish.assert_not_called()
         self.cw.put_metric_data.assert_not_called()
 
+    def test_job_weights_and_preferred_skills_are_used(self):
+        self.jobs.items[0].update(weights={"skills": Decimal(40), "experience": Decimal(40), "education": Decimal(20)},
+                                  preferredSkills={"terraform", "kubernetes"})
+        self.textract_returns(STRONG_LINES + ["Terraform"])
+        out = processor.lambda_handler(s3_event(), FakeContext())
+        values = self.cands.updates[0]["ExpressionAttributeValues"]
+        self.assertEqual(values[":weights"], {"skills": 40, "experience": 40, "education": 20})
+        self.assertEqual(values[":matchedPreferred"], ["terraform"])
+        self.assertEqual(values[":bonusScore"], Decimal("2.0"))
+        self.assertEqual(values[":skillScore"], Decimal("40.0"))
+        self.assertEqual(out["results"][0]["score"], 100)                     # 40 + 40 + 20 + 2, capped
+        self.assertIn("bonus 2.0 / 10", self.sns.publish.call_args.kwargs["Message"])
+
+    def test_full_text_stored_and_truncated(self):
+        self.textract_returns(STRONG_LINES + ["x" * 30000])
+        processor.lambda_handler(s3_event(), FakeContext())
+        values = self.cands.updates[0]["ExpressionAttributeValues"]
+        self.assertEqual(len(values[":fullText"]), processor.FULL_TEXT_CHARS)
+        self.assertTrue(values[":fullText"].startswith("Ananya Rao"))
+        self.assertEqual(len(values[":textPreview"]), processor.PREVIEW_CHARS)
+
+    def test_rescoring_a_failed_candidate_overwrites_everything(self):
+        self.cands.items[0].update(status="PENDING", failureReason="no text layer in the PDF (scanned image)")
+        self.textract_returns(STRONG_LINES)
+        processor.lambda_handler(s3_event(), FakeContext())
+        upd = self.cands.updates[0]
+        self.assertIn("REMOVE failureReason", upd["UpdateExpression"])
+        written = {name.lstrip("#") for name in upd["ExpressionAttributeNames"]}
+        for field in ("status", "score", "skillScore", "expScore", "eduScore", "bonusScore", "matchedSkills",
+                      "missingSkills", "matchedPreferred", "weights", "yearsExperience", "textPreview",
+                      "fullText", "processedAt"):
+            self.assertIn(field, written)
+
     def test_low_score_does_not_alert(self):
         self.textract_returns(["Imran", "Python developer"], split=1)
         out = processor.lambda_handler(s3_event(), FakeContext())

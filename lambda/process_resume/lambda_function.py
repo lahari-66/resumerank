@@ -37,6 +37,7 @@ SAFETY_MS = 15000            # stop polling Textract with this much Lambda time 
 COMPREHEND_MAX_BYTES = 5000
 ENTITY_TYPES = {"ORGANIZATION", "DATE", "TITLE"}
 PREVIEW_CHARS = 300
+FULL_TEXT_CHARS = 20000          # stored for recruiter full-text search (item limit is 400 KB)
 
 KEY_RE = re.compile(r"^resumes/(?P<jobId>[A-Za-z0-9-]+)/(?P<candidateId>[A-Za-z0-9-]+)\.pdf$")
 
@@ -250,6 +251,8 @@ def to_dynamo(value):
         return Decimal(str(value))
     if isinstance(value, list):
         return [to_dynamo(v) for v in value]
+    if isinstance(value, dict):
+        return {k: to_dynamo(v) for k, v in value.items()}
     return value
 
 
@@ -260,10 +263,14 @@ def save_scored(job_id, candidate_id, key, result, text):
         "skillScore": result["skillScore"],
         "expScore": result["expScore"],
         "eduScore": result["eduScore"],
+        "bonusScore": result["bonusScore"],
         "matchedSkills": result["matchedSkills"],
         "missingSkills": result["missingSkills"],
+        "matchedPreferred": result["matchedPreferred"],
+        "weights": result["weights"],
         "yearsExperience": result["yearsExperience"],
         "textPreview": text[:PREVIEW_CHARS],
+        "fullText": text[:FULL_TEXT_CHARS],
         "s3Key": key,
         "processedAt": now_iso(),
     }
@@ -339,8 +346,11 @@ def notify(job, candidate, result):
         f"Candidate:  {name}",
         f"Email:      {candidate.get('email', '-')}",
         f"Score:      {result['score']} / 100",
-        f"  skills {result['skillScore']} / 60, experience {result['expScore']} / 20, "
-        f"education {result['eduScore']} / 20",
+        f"  skills {result['skillScore']} / {result['weights']['skills']}, "
+        f"experience {result['expScore']} / {result['weights']['experience']}, "
+        f"education {result['eduScore']} / {result['weights']['education']}, "
+        f"bonus {result['bonusScore']} / 10",
+        f"Preferred:  {', '.join(result['matchedPreferred']) or '-'}",
         f"Experience: {result['yearsExperience']} years (estimated)",
         f"Matched:    {', '.join(result['matchedSkills']) or '-'}",
         f"Missing:    {', '.join(result['missingSkills']) or '-'}",
@@ -393,6 +403,8 @@ def process_record(record, context, retryable=False):
             min_years=int(job.get("minYears", 0)),
             key_phrases=phrases,
             date_entities=dates,
+            preferred_skills=list(job.get("preferredSkills") or []),
+            weights=job.get("weights"),
         )
         logger.info("score: %s", json.dumps(result))
 

@@ -7,6 +7,10 @@ Pure Python, no AWS calls, so it can be unit-tested locally.
                   (fresher roles, min_years == 0: 20 if any internship/project dates found)
     edu_score   = 20 if a degree keyword is found else 10
     total       = round(skill_score + exp_score + edu_score)
+
+Per-job options (INTERFACES.md): weights {skills, experience, education} summing to 100 replace
+60/20/20 (no degree = half the education weight), and every preferred skill found adds 2 bonus
+points up to 10. The total is capped at 100.
 """
 
 import json
@@ -23,6 +27,9 @@ EXP_WEIGHT = 20
 EDU_FULL = 20
 EDU_NONE = 10
 MAX_YEARS = 15
+DEFAULT_WEIGHTS = {"skills": SKILL_WEIGHT, "experience": EXP_WEIGHT, "education": EDU_FULL}
+BONUS_PER_PREFERRED = 2
+MAX_BONUS = 10
 
 DEGREE_PATTERNS = [
     r"b\.?\s?tech",
@@ -294,33 +301,54 @@ def _round_half_up(x):
     return int(math.floor(x + 0.5))
 
 
+def normalise_weights(weights):
+    """Integers 0-100 for skills / experience / education that sum to 100, else the defaults."""
+    if not weights:
+        return dict(DEFAULT_WEIGHTS)
+    try:
+        out = {k: int(weights[k]) for k in DEFAULT_WEIGHTS}
+    except (KeyError, TypeError, ValueError):
+        return dict(DEFAULT_WEIGHTS)
+    if any(v < 0 or v > 100 for v in out.values()) or sum(out.values()) != 100:
+        return dict(DEFAULT_WEIGHTS)
+    return out
+
+
 def score_candidate(text, required_skills, min_years=0, key_phrases=(), date_entities=(),
-                    dictionary=None, now=None):
+                    dictionary=None, now=None, preferred_skills=(), weights=None):
     dictionary = dictionary or load_skills()
     required = sorted({canonicalise(s, dictionary) for s in required_skills if s and s.strip()})
     if not required:
         raise ValueError("job has no required skills")
+    preferred = sorted({canonicalise(s, dictionary) for s in preferred_skills or () if s and s.strip()} - set(required))
+    w = normalise_weights(weights)
 
-    found = find_skills(text, key_phrases, dictionary, extra=required)
+    found = find_skills(text, key_phrases, dictionary, extra=required + preferred)
     matched = [s for s in required if s in found]
     missing = [s for s in required if s not in found]
-    skill_score = len(matched) / len(required) * SKILL_WEIGHT
+    skill_score = len(matched) / len(required) * w["skills"]
 
     years, has_dates = estimate_experience(text, date_entities, now)
     min_years = int(min_years or 0)
     if min_years == 0:
-        exp_score = float(EXP_WEIGHT) if (has_dates or years > 0) else 0.0
+        exp_score = float(w["experience"]) if (has_dates or years > 0) else 0.0
     else:
-        exp_score = min(years / max(min_years, 1), 1.0) * EXP_WEIGHT
+        exp_score = min(years / max(min_years, 1), 1.0) * w["experience"]
 
-    edu_score = float(EDU_FULL if has_degree(text) else EDU_NONE)
+    edu_score = float(w["education"]) if has_degree(text) else w["education"] / 2
+
+    matched_preferred = [s for s in preferred if s in found]
+    bonus = float(min(BONUS_PER_PREFERRED * len(matched_preferred), MAX_BONUS))
 
     return {
-        "score": _round_half_up(skill_score + exp_score + edu_score),
+        "score": min(100, _round_half_up(skill_score + exp_score + edu_score + bonus)),
         "skillScore": round(skill_score, 2),
         "expScore": round(exp_score, 2),
-        "eduScore": edu_score,
+        "eduScore": round(edu_score, 2),
+        "bonusScore": bonus,
         "matchedSkills": matched,
         "missingSkills": missing,
+        "matchedPreferred": matched_preferred,
         "yearsExperience": years,
+        "weights": w,
     }
